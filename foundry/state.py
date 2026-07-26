@@ -16,6 +16,7 @@ from typing import Annotated, Literal
 from typing_extensions import TypedDict
 
 from foundry.models import (
+    CleaningPlan,
     CVStrategy,
     DataProfile,
     ExperimentResult,
@@ -38,6 +39,7 @@ class FoundryState(TypedDict):
 
     data_profile: DataProfile | None
     leakage_findings: list[LeakageFinding]
+    cleaning_plan: CleaningPlan | None
     cv_strategy: CVStrategy | None
 
     experiment_plan: list[ExperimentSpec]

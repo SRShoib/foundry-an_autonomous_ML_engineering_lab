@@ -52,6 +52,7 @@ def test_dataset_ref_holds_a_reference_not_raw_data() -> None:
         "spent_usd": 0.0,
         "data_profile": None,
         "leakage_findings": [],
+        "cleaning_plan": None,
         "cv_strategy": None,
         "experiment_plan": [],
         "experiments": [],
