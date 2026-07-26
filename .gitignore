@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.pyright/
+*.egg-info/
+dist/
+build/
+
+.env
+
+mlruns/
+mlartifacts/
+
+.DS_Store
