@@ -121,6 +121,17 @@ def test_sandbox_timeout_kills_container_and_leaves_none_running() -> None:
 
 
 @pytest.mark.docker
+def test_sandbox_kills_true_infinite_loop_after_timeout() -> None:
+    """Distinct from the sleep-based timeout test above: a CPU-spinning `while True` is the
+    realistic shape of a runaway agent-written bug (e.g. a broken loop condition), not a
+    blocking I/O wait — this proves the timeout kill also holds under that failure mode."""
+    result = sandbox.run("while True:\n    pass\n", limits=SandboxLimits(timeout_seconds=3))
+    assert result.timed_out is True
+    assert result.exit_code is None
+    assert result.duration_s < 10  # killed promptly, not left spinning to the process timeout
+
+
+@pytest.mark.docker
 def test_sandbox_collects_artifacts_written_to_scratch() -> None:
     code = "with open('output.txt', 'w') as f:\n    f.write('artifact-content')\n"
     result = sandbox.run(code)

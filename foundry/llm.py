@@ -49,7 +49,7 @@ class AnthropicClient:
     """Real LLMClient backed by langchain_anthropic.ChatAnthropic."""
 
     def __init__(self, role: AgentRole) -> None:
-        if settings.anthropic_api_key is None:
+        if not settings.anthropic_api_key:
             raise ValueError("AnthropicClient requires ANTHROPIC_API_KEY to be set")
         self._role = role
         self._chat = ChatAnthropic(
@@ -121,6 +121,8 @@ _stub_client = StubClient()
 
 
 def get_llm(role: AgentRole) -> LLMClient:
-    if settings.anthropic_api_key is None:
+    # Falsy, not just `is None`: `cp .env.example .env` without filling in a key leaves
+    # ANTHROPIC_API_KEY="" (present but empty), which must be treated as "unset" too.
+    if not settings.anthropic_api_key:
         return _stub_client
     return AnthropicClient(role)

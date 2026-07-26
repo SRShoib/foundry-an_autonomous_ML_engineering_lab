@@ -33,6 +33,15 @@ def test_get_llm_returns_stub_when_no_api_key(monkeypatch: pytest.MonkeyPatch) -
     assert isinstance(get_llm("principal"), StubClient)
 
 
+def test_get_llm_returns_stub_when_api_key_is_empty_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `cp .env.example .env` without filling in a key leaves ANTHROPIC_API_KEY="" (present but
+    # empty) rather than unset — must be treated the same as None, not passed to AnthropicClient.
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    assert isinstance(get_llm("worker"), StubClient)
+
+
 def test_get_llm_returns_anthropic_client_when_key_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-00000000000000000000000000")
     client = get_llm("worker")
