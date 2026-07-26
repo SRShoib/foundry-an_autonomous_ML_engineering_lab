@@ -6,7 +6,7 @@ trained model, an experiment report, and a model card. See [SPEC.md](SPEC.md) fo
 architecture and milestone plan; see [CLAUDE.md](CLAUDE.md) for project conventions and
 guardrails.
 
-This repo is built one milestone at a time. **Status: M2 (foundations) complete.**
+This repo is built one milestone at a time. **Status: M3 (V1 graph) complete.**
 
 ## Requirements
 
@@ -26,9 +26,12 @@ make smoke                   # proves the guardrails: sandbox isolation, checkpo
 
 make lint                    # ruff
 make typecheck                # pyright
-make test                    # pytest — unit tests always run; @pytest.mark.docker tests
-                              # (real sandbox isolation checks) run too if Docker + the
-                              # sandbox image are available, and skip automatically if not
+make test                    # pytest — unit tests always run; @pytest.mark.docker and
+                              # @pytest.mark.postgres tests run too if the corresponding
+                              # service is available, and skip automatically if not
+
+make run TASK=churn          # runs the V1 graph end-to-end on the bundled churn dataset;
+                              # writes artifacts/<thread_id>/{report.md,model_card.md}
 
 make down                    # stop postgres + mlflow
 ```
@@ -49,6 +52,21 @@ MLflow UI: http://localhost:5000
   whenever `ANTHROPIC_API_KEY` is unset, so the graph and its tests are never gated on a live
   model or network access.
 - **Metrics are never estimated by an LLM**: `foundry/models.py` splits structured types into
-  LLM-authored (plans, findings, profiles) and code-authored (`ExperimentResult`, sandbox
-  output) groups — the stub's canned-response registry only covers the former, so wiring an
-  LLM to produce a metric fails loudly instead of silently.
+  LLM-authored (plans, findings, assessments) and code-authored (`DataProfile`,
+  `ExperimentResult`, sandbox output) groups — the stub's canned-response registry only covers
+  the former, so wiring an LLM to produce a metric fails loudly instead of silently. The
+  experiment runner's only LLM-authored output is a code string (`TrainingCode`); metrics are
+  parsed from the sandbox's stdout by `foundry/tools/metrics.py`, a pure function with no model
+  in the loop.
+- **The experiment runner is a hand-rolled self-debug loop, not `langgraph.prebuilt.
+  create_react_agent`**: that prebuilt requires a real tool-calling chat model, which the
+  offline stub cannot provide without breaking the "no API keys" guarantee — and more
+  importantly, it would let metrics reach `ExperimentResult` through the model's narrated final
+  answer rather than a pure parse of sandbox output. The hand-rolled version is still reason →
+  act → observe (write code → run in the sandbox → feed the traceback back), just with an
+  explicit, countable `for attempt in range(self_debug_max_attempts)` instead of an emergent
+  property of a recursion limit.
+- **The principal's hard stops are code, its judgment is an LLM call**: iteration/budget/target
+  caps are checked before the LLM is ever consulted, and `PrincipalDirective`'s `stop_reason`
+  type deliberately excludes `budget_exhausted`/`max_iterations` — a model can never talk its
+  way past a cap it isn't allowed to reason about.

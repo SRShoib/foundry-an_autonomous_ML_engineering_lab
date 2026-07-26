@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +36,32 @@ class Settings(BaseSettings):
     llm_max_parse_retries: int = 2
 
     anthropic_api_key: str | None = None
+
+    # Principal loop (foundry/teams/principal.py, M3) — SPEC: "principal loop max iterations"
+    principal_max_iterations: int = 12
+    max_experiments_total: int = 3
+    max_experiments_per_iteration: int = 1  # M4 raises this once Send fan-out lands
+
+    # LangGraph's own default recursion_limit is 10007 (effectively unbounded) — M3 sets a real
+    # cap so a routing bug fails fast with GraphRecursionError instead of running for minutes.
+    graph_recursion_limit: int = 40
+
+    # Experiment runner self-debug (foundry/teams/experiment_runner.py, M3) — SPEC: "runner
+    # self-debug max k=3"
+    self_debug_max_attempts: int = 3
+    self_debug_error_chars: int = 4000
+    # sandbox_timeout_seconds=60 is tuned for M2's isolation tests, not for import + CV fitting.
+    experiment_timeout_seconds: int = 300
+    profile_timeout_seconds: int = 120
+
+    # Crude, deterministic cost model — replaced by real per-agent token accounting in M4.
+    cost_per_llm_call_usd: float = 0.01
+    cost_per_sandbox_minute_usd: float = 0.002
+
+    # Bundled sample datasets (foundry/datasets.py, M3) and where run artifacts are written.
+    data_dir: Path = Path("data/samples")
+    artifacts_dir: Path = Path("artifacts")
+    random_seed: int = 42
 
 
 settings = Settings()

@@ -1,4 +1,4 @@
-.PHONY: up down sandbox-build smoke lint fmt typecheck test
+.PHONY: up down sandbox-build smoke sample-data run lint fmt typecheck test
 
 up:
 	docker compose up -d --build --wait
@@ -11,6 +11,12 @@ sandbox-build:
 
 smoke:
 	uv run python scripts/smoke_test.py
+
+sample-data:
+	uv run python scripts/make_sample_data.py
+
+run:
+	uv run python -m foundry.cli --task $(TASK)
 
 lint:
 	uv run ruff check .

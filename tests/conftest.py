@@ -1,13 +1,14 @@
-"""Shared pytest configuration. Tests marked @pytest.mark.docker are skipped automatically when
-the Docker daemon isn't reachable or the sandbox image hasn't been built — this keeps `make
-test` fast and dependency-free per README, while still exercising the real isolation checks
-whenever Docker is available (as it is after `make sandbox-build`)."""
+"""Shared pytest configuration. Tests marked @pytest.mark.docker or @pytest.mark.postgres are
+skipped automatically when the corresponding service isn't reachable — this keeps `make test`
+fast and dependency-free per README, while still exercising the real integration whenever the
+service is available (Docker after `make sandbox-build`; Postgres after `make up`)."""
 
 from __future__ import annotations
 
 import shutil
 import subprocess
 
+import psycopg
 import pytest
 
 from foundry.config import settings
@@ -28,15 +29,22 @@ def _docker_ready() -> bool:
     return image_check.returncode == 0
 
 
-_DOCKER_READY = _docker_ready()
+def _postgres_ready() -> bool:
+    try:
+        with psycopg.connect(settings.database_url, connect_timeout=2):
+            return True
+    except Exception:
+        return False
+
+
+_SERVICE_READY = {
+    "docker": (_docker_ready(), "Docker daemon or foundry-sandbox:latest image not available"),
+    "postgres": (_postgres_ready(), f"Postgres not reachable at {settings.database_url}"),
+}
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    if _DOCKER_READY:
-        return
-    skip_docker = pytest.mark.skip(
-        reason="Docker daemon or foundry-sandbox:latest image not available"
-    )
     for item in items:
-        if "docker" in item.keywords:
-            item.add_marker(skip_docker)
+        for marker, (ready, reason) in _SERVICE_READY.items():
+            if marker in item.keywords and not ready:
+                item.add_marker(pytest.mark.skip(reason=reason))

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from foundry.config import Settings
@@ -10,6 +12,13 @@ _ENV_VARS = (
     "COST_CAP_USD_TOTAL",
     "PRINCIPAL_MODEL",
     "ANTHROPIC_API_KEY",
+    "PRINCIPAL_MAX_ITERATIONS",
+    "MAX_EXPERIMENTS_TOTAL",
+    "MAX_EXPERIMENTS_PER_ITERATION",
+    "GRAPH_RECURSION_LIMIT",
+    "SELF_DEBUG_MAX_ATTEMPTS",
+    "DATA_DIR",
+    "ARTIFACTS_DIR",
 )
 
 
@@ -27,6 +36,13 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.principal_model == settings.red_team_model
     assert settings.worker_model != settings.principal_model
     assert settings.anthropic_api_key is None
+
+    # M3: principal loop / self-debug caps (SPEC: "runner self-debug max k=3")
+    assert settings.self_debug_max_attempts == 3
+    assert settings.max_experiments_per_iteration <= settings.max_experiments_total
+    assert settings.graph_recursion_limit > settings.principal_max_iterations * 2
+    assert settings.data_dir == Path("data/samples")
+    assert settings.artifacts_dir == Path("artifacts")
 
 
 def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
