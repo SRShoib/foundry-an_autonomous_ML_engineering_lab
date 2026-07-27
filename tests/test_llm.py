@@ -10,7 +10,7 @@ import pytest
 from pydantic import BaseModel
 
 from foundry.config import settings
-from foundry.llm import AnthropicClient, StubClient, deterministic_seed, get_llm
+from foundry.llm import AnthropicClient, MeteredClient, StubClient, deterministic_seed, get_llm
 
 
 class _Greeting(BaseModel):
@@ -29,8 +29,8 @@ def _greeting_factory(prompt: str) -> _Greeting:
 
 def test_get_llm_returns_stub_when_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", None)
-    assert isinstance(get_llm("worker"), StubClient)
-    assert isinstance(get_llm("principal"), StubClient)
+    assert isinstance(get_llm("worker")._inner, StubClient)  # noqa: SLF001
+    assert isinstance(get_llm("principal")._inner, StubClient)  # noqa: SLF001
 
 
 def test_get_llm_returns_stub_when_api_key_is_empty_string(
@@ -39,13 +39,71 @@ def test_get_llm_returns_stub_when_api_key_is_empty_string(
     # `cp .env.example .env` without filling in a key leaves ANTHROPIC_API_KEY="" (present but
     # empty) rather than unset — must be treated the same as None, not passed to AnthropicClient.
     monkeypatch.setattr(settings, "anthropic_api_key", "")
-    assert isinstance(get_llm("worker"), StubClient)
+    assert isinstance(get_llm("worker")._inner, StubClient)  # noqa: SLF001
 
 
 def test_get_llm_returns_anthropic_client_when_key_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-00000000000000000000000000")
     client = get_llm("worker")
-    assert isinstance(client, AnthropicClient)
+    assert isinstance(client._inner, AnthropicClient)  # noqa: SLF001
+
+
+# --- MeteredClient / per-agent cost logging (M4) --------------------------------------------
+
+
+def test_metered_client_records_flat_rate_cost_for_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    client = get_llm("worker")
+    stub = client._inner  # noqa: SLF001
+    assert isinstance(stub, StubClient)
+    stub.register(_Greeting, _greeting_factory)
+
+    assert client.costs == []
+    client.structured("plan it", _Greeting)
+    assert len(client.costs) == 1
+    entry = client.costs[0]
+    assert entry.agent_role == "worker"
+    assert entry.kind == "llm"
+    assert entry.input_tokens == 0 and entry.output_tokens == 0
+    assert entry.usd == settings.cost_per_llm_call_usd
+
+
+def test_metered_client_records_token_priced_cost_for_real_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-00000000000000000000000000")
+    client = get_llm("principal")
+    anthropic_client = client._inner  # noqa: SLF001
+    assert isinstance(anthropic_client, AnthropicClient)
+    good = _Greeting(text="ok", number=1)
+
+    class _Raw:
+        usage_metadata = {"input_tokens": 100, "output_tokens": 50}
+
+    anthropic_client._chat = _FakeChat(  # type: ignore[attr-defined]  # noqa: SLF001
+        [{"raw": _Raw(), "parsed": good, "parsing_error": None}]
+    )
+
+    client.structured("decide", _Greeting)
+    assert len(client.costs) == 1
+    entry = client.costs[0]
+    assert entry.agent_role == "principal"
+    assert entry.model == settings.principal_model
+    assert entry.input_tokens == 100
+    assert entry.output_tokens == 50
+    assert entry.usd > 0
+
+
+def test_metered_client_accumulates_one_entry_per_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    client = get_llm("worker")
+    stub = client._inner  # noqa: SLF001
+    assert isinstance(stub, StubClient)
+    stub.register(_Greeting, _greeting_factory)
+
+    client.structured("a", _Greeting)
+    client.structured("b", _Greeting)
+    assert len(client.costs) == 2
 
 
 # --- StubClient -----------------------------------------------------------------------------
@@ -101,7 +159,9 @@ def _anthropic_client(
 ) -> AnthropicClient:
     monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-00000000000000000000000000")
     monkeypatch.setattr(settings, "llm_max_parse_retries", max_parse_retries)
-    client = get_llm("worker")
+    metered = get_llm("worker")
+    assert isinstance(metered, MeteredClient)
+    client = metered._inner  # noqa: SLF001
     assert isinstance(client, AnthropicClient)
     return client
 

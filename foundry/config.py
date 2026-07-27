@@ -11,8 +11,9 @@ class Settings(BaseSettings):
     # Postgres — backs the LangGraph checkpointer (database: foundry)
     database_url: str = "postgresql://foundry:foundry@localhost:5432/foundry"
 
-    # MLflow tracking server (reachable from the host)
+    # MLflow tracking server (reachable from the host) — foundry/tools/tracker.py, M4
     mlflow_tracking_uri: str = "http://localhost:5000"
+    mlflow_experiment_name: str = "foundry"
 
     # Sandbox execution (foundry/tools/sandbox.py wraps these in M2)
     sandbox_image: str = "foundry-sandbox:latest"
@@ -39,12 +40,17 @@ class Settings(BaseSettings):
 
     # Principal loop (foundry/teams/principal.py, M3) — SPEC: "principal loop max iterations"
     principal_max_iterations: int = 12
-    max_experiments_total: int = 3
-    max_experiments_per_iteration: int = 1  # M4 raises this once Send fan-out lands
+    max_experiments_total: int = 6
+    max_experiments_per_iteration: int = 3  # M4: one planning pass now fans out via Send
 
     # LangGraph's own default recursion_limit is 10007 (effectively unbounded) — M3 sets a real
     # cap so a routing bug fails fast with GraphRecursionError instead of running for minutes.
     graph_recursion_limit: int = 40
+    # Bounds how many Send-fanned-out experiment_runner branches (each a real docker container,
+    # foundry/tools/sandbox.py) run concurrently — verified against langchain_core's
+    # get_executor_for_config: RunnableConfig.max_concurrency sets the BackgroundExecutor's
+    # ThreadPoolExecutor(max_workers=...) that LangGraph's Pregel loop actually uses.
+    graph_max_concurrency: int = 3
 
     # Experiment runner self-debug (foundry/teams/experiment_runner.py, M3) — SPEC: "runner
     # self-debug max k=3"
@@ -54,7 +60,10 @@ class Settings(BaseSettings):
     experiment_timeout_seconds: int = 300
     profile_timeout_seconds: int = 120
 
-    # Crude, deterministic cost model — replaced by real per-agent token accounting in M4.
+    # Cost model (foundry/tools/cost.py, foundry/llm.py, M4). Real Anthropic calls are priced
+    # from actual AIMessage.usage_metadata against foundry/tools/cost.py's per-model $/token
+    # table; cost_per_llm_call_usd is the flat per-call fallback used only by StubClient, which
+    # has no token usage to report (SPEC's "graph runs with NO api keys" guarantee, M2).
     cost_per_llm_call_usd: float = 0.01
     cost_per_sandbox_minute_usd: float = 0.002
 

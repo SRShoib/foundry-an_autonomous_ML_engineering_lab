@@ -84,6 +84,7 @@ def _empty_data_team_state(**overrides: Any) -> DataTeamState:
         "cleaning_plan": None,
         "cv_strategy": None,
         "errors": [],
+        "costs": [],
     }
     state.update(overrides)  # type: ignore[typeddict-item]
     return state
@@ -95,6 +96,7 @@ class _FakeLLM:
 
     def __init__(self, response: object) -> None:
         self._response = response
+        self.costs: list[Any] = []
 
     def structured(self, prompt: str, schema: type, *, system: str | None = None) -> Any:
         return self._response
@@ -104,6 +106,7 @@ class _FakeLLM:
 def _stub_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     client = StubClient()
     register_canned_responses(client)
+    client.costs = []  # type: ignore[attr-defined]  # bare StubClient, not MeteredClient-wrapped
     monkeypatch.setattr(data_team, "get_llm", lambda role: client)
 
 
@@ -128,6 +131,8 @@ def test_profiler_measurements_come_from_raw_profile_not_the_llm(
     )
 
     class _SwitchingFakeLLM:
+        costs: list[Any] = []
+
         def structured(self, prompt: str, schema: type, *, system: str | None = None) -> Any:
             if schema is ProfileAssessment:
                 return fake_assessment
@@ -263,6 +268,7 @@ def test_data_team_node_populates_all_output_keys(monkeypatch: pytest.MonkeyPatc
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "costs": [],
         "lessons": [],
         "report_md": None,
         "model_card_md": None,

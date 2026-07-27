@@ -40,6 +40,7 @@ testpaths = ["tests"]
 markers = [
   "docker: requires a running Docker daemon and the foundry-sandbox:latest image",
   "postgres: requires a reachable Postgres instance (DATABASE_URL)",
+  "mlflow: requires a reachable MLflow tracking server (MLFLOW_TRACKING_URI)",
 ]
 
 [build-system]

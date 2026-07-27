@@ -172,7 +172,18 @@ def test_experiment_plan_escalates_model_family_by_prior_attempts() -> None:
     assert second.specs[0].model_family == "random_forest"
 
 
-def _code_request(*, attempt: int, prior_experiments: int) -> CodeRequest:
+def test_experiment_plan_proposes_one_distinct_family_per_batch_slot() -> None:
+    """M4: one planning pass must produce enough specs to give Send fan-out something to
+    parallelize (settings.max_experiments_per_iteration == 3 by default)."""
+    from foundry.config import settings
+
+    client = _client()
+    plan = client.structured(with_context("plan", _plan_context()), ExperimentPlan)
+    assert len(plan.specs) == settings.max_experiments_per_iteration
+    assert len({spec.model_family for spec in plan.specs}) == len(plan.specs)
+
+
+def _code_request(*, attempt: int, prior_experiments: int, batch_index: int = 0) -> CodeRequest:
     return CodeRequest(
         experiment_id="exp-001",
         model_family="logistic_regression",
@@ -190,19 +201,20 @@ def _code_request(*, attempt: int, prior_experiments: int) -> CodeRequest:
         metrics_sentinel="FOUNDRY_METRICS",
         attempt=attempt,
         prior_experiments=prior_experiments,
+        batch_index=batch_index,
         previous_error=None,
     )
 
 
 def test_training_code_first_attempt_is_naive_and_syntactically_valid() -> None:
-    request = _code_request(attempt=0, prior_experiments=0)
+    request = _code_request(attempt=0, prior_experiments=0, batch_index=0)
     result = _client().structured(with_context("write code", request), TrainingCode)
     ast.parse(result.code)
     assert "OneHotEncoder" not in result.code
 
 
 def test_training_code_later_attempt_uses_the_encoding_pipeline() -> None:
-    request = _code_request(attempt=1, prior_experiments=0)
+    request = _code_request(attempt=1, prior_experiments=0, batch_index=0)
     result = _client().structured(with_context("write code", request), TrainingCode)
     ast.parse(result.code)
     assert "OneHotEncoder" in result.code
@@ -217,6 +229,16 @@ def test_training_code_differs_between_attempt_0_and_attempt_1() -> None:
         with_context("c", _code_request(attempt=1, prior_experiments=0)), TrainingCode
     )
     assert naive.code != piped.code
+
+
+def test_training_code_uses_pipeline_for_non_first_batch_slots_even_on_attempt_zero() -> None:
+    """Only batch_index == 0 of the first batch gets the deliberately-buggy naive code — every
+    other parallel runner in that same Send-fanned-out batch shares prior_experiments == 0 too,
+    so without this gate every branch would emit buggy code (foundry/stubs.py)."""
+    request = _code_request(attempt=0, prior_experiments=0, batch_index=1)
+    result = _client().structured(with_context("write code", request), TrainingCode)
+    ast.parse(result.code)
+    assert "OneHotEncoder" in result.code
 
 
 def _supervisor_context(**overrides: Any) -> SupervisorContext:

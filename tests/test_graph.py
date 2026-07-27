@@ -4,7 +4,9 @@ Command[Literal[...]] goto target names a real node — LangGraph 1.2.9 validate
 
 from __future__ import annotations
 
-from typing import get_type_hints
+import threading
+import time
+from typing import Any, get_type_hints
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
@@ -12,7 +14,7 @@ from langgraph.errors import GraphRecursionError
 
 from foundry.config import settings
 from foundry.graph import build_graph, initial_state, run_config
-from foundry.llm import StubClient
+from foundry.llm import MeteredClient, StubClient
 from foundry.models import SandboxResult
 from foundry.state import FoundryState
 from foundry.stubs import register_canned_responses
@@ -60,11 +62,17 @@ _SANDBOX_SUCCESS = SandboxResult(
 
 
 def _use_stub_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Wraps the shared StubClient in a fresh MeteredClient per get_llm() call — mirroring
+    foundry.llm.get_llm's own behavior — so concurrent Send-fanned-out experiment_runner
+    branches (real threads; see foundry/teams/principal.py) each get an isolated `.costs` list
+    instead of racing on one shared list."""
     monkeypatch.setattr(settings, "anthropic_api_key", None)
     client = StubClient()
     register_canned_responses(client)
     for module in _ALL_TEAM_MODULES:
-        monkeypatch.setattr(module, "get_llm", lambda role: client)
+        monkeypatch.setattr(
+            module, "get_llm", lambda role, _client=client: MeteredClient(role, _client, model=None)
+        )
 
 
 def test_build_graph_compiles_with_expected_nodes() -> None:
@@ -104,6 +112,45 @@ def test_recursion_limit_exceeded_raises_graph_recursion_error(
         )
 
 
+def test_send_fanout_runs_in_parallel_and_never_loses_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test for M4's Send fan-out (foundry/teams/principal.py): the first planning
+    batch proposes max_experiments_per_iteration distinct families (foundry/stubs.py), principal
+    fans all of them out via Send in one Command, and they genuinely execute on separate threads
+    (verified against LangGraph 1.2.9's BackgroundExecutor — a real ThreadPoolExecutor). Every
+    branch's cost must survive the merge: state["spent_usd"] is derived from state["costs"] (an
+    add-reducer) by principal, never written by the runners directly, which is exactly the fix
+    for the lost-update race concurrent branches would otherwise hit on a plain, non-reducer
+    field. No Docker needed — sandbox.run and tracker.log_run are both faked."""
+    _use_stub_everywhere(monkeypatch)
+    monkeypatch.setattr(
+        data_team_module.profiler_tool, "profile", lambda dataset, **kw: _RAW_PROFILE
+    )
+    monkeypatch.setattr(runner_module.tracker, "log_run", lambda **kwargs: "run-id")
+
+    seen_threads: set[int] = set()
+
+    def _fake_run(code: str, **kw: Any) -> SandboxResult:
+        seen_threads.add(threading.get_ident())
+        time.sleep(0.05)  # hold the thread long enough for sibling branches to overlap
+        return _SANDBOX_SUCCESS
+
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run)
+
+    graph = build_graph(InMemorySaver())
+    state = initial_state(goal="predict churn", dataset_ref="churn", budget_usd=20.0)
+    final_state = graph.invoke(state, run_config("fanout-test"))
+
+    assert len(final_state["experiments"]) == settings.max_experiments_per_iteration
+    assert len(seen_threads) >= 2  # genuinely parallel, not serialized onto one thread
+    assert all(result.status == "success" for result in final_state["experiments"])
+
+    total_cost = round(sum(entry.usd for entry in final_state["costs"]), 8)
+    assert final_state["spent_usd"] == pytest.approx(total_cost)
+    assert final_state["spent_usd"] > 0
+
+
 @pytest.mark.docker
 def test_end_to_end_offline_run_with_in_memory_checkpointer(
     monkeypatch: pytest.MonkeyPatch,
@@ -118,6 +165,8 @@ def test_end_to_end_offline_run_with_in_memory_checkpointer(
     assert final_state["stop_reason"] is not None
     assert final_state["iteration_count"] > 1
     assert any(result.status == "success" for result in final_state["experiments"])
+    assert final_state["costs"]  # M4: per-agent cost ledger populated
+    assert final_state["leaderboard"]  # M4: principal maintains this every turn
 
 
 @pytest.mark.postgres
