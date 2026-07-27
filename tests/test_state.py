@@ -105,6 +105,7 @@ def test_dataset_ref_holds_a_reference_not_raw_data() -> None:
         "leakage_findings": [],
         "cleaning_plan": None,
         "cv_strategy": None,
+        "approach_memo": None,
         "experiment_plan": [],
         "experiments": [],
         "leaderboard": [],

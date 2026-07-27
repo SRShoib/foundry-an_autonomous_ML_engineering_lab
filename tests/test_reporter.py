@@ -13,6 +13,7 @@ import pytest
 
 from foundry.leaderboard import rank_experiments
 from foundry.models import (
+    ApproachMemo,
     CostEntry,
     CVStrategy,
     ExperimentResult,
@@ -36,6 +37,7 @@ def _state(**overrides: Any) -> FoundryState:
         "cv_strategy": CVStrategy(
             kind="stratified_kfold", n_splits=5, rationale="balanced classes"
         ),
+        "approach_memo": None,
         "experiment_plan": [],
         "experiments": [],
         "leaderboard": [],
@@ -98,6 +100,30 @@ def test_render_report_cites_mlflow_run_ids() -> None:
     narrative = ReportNarrative(summary="s", recommendation="r")
     report = render_report(_state(experiments=[result]), narrative, board, spent_usd=0.1)
     assert "run-abc123" in report
+
+
+def test_render_report_shows_lessons_applied_when_a_memo_is_present() -> None:
+    """M7: the scout's recommendation (state["approach_memo"]) is what PAST runs' lessons
+    actually changed about THIS run's plan — distinct from foundry/teams/lessons.py's own
+    "## Lessons learned" section, which is what this run contributes for FUTURE runs."""
+    narrative = ReportNarrative(summary="s", recommendation="r")
+    memo = ApproachMemo(
+        summary="Prior lesson(s) favor gradient_boosting; try it first.",
+        recommended_families=["gradient_boosting"],
+        avoid_families=["mlp"],
+        cautions="watch for the known leak column",
+    )
+    report = render_report(_state(approach_memo=memo), narrative, [], spent_usd=0.0)
+    assert "## Lessons applied" in report
+    assert "gradient_boosting" in report
+    assert "mlp" in report
+    assert "watch for the known leak column" in report
+
+
+def test_render_report_omits_lessons_applied_section_when_no_memo() -> None:
+    narrative = ReportNarrative(summary="s", recommendation="r")
+    report = render_report(_state(), narrative, [], spent_usd=0.0)
+    assert "## Lessons applied" not in report
 
 
 def test_render_report_lists_errors_when_present() -> None:

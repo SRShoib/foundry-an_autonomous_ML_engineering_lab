@@ -21,11 +21,12 @@ an extra container start per parallel branch.
 from __future__ import annotations
 
 from string import Template
-from typing import Literal
+from typing import Literal, cast
 
 from foundry.config import settings
 from foundry.llm import StubClient, get_stub_client
 from foundry.models import (
+    ApproachMemo,
     CleaningPlan,
     CVStrategy,
     DataProfile,
@@ -33,6 +34,7 @@ from foundry.models import (
     ExperimentSpec,
     LeakageFinding,
     LeakageReport,
+    LessonDraft,
     PrincipalDirective,
     ProfileAssessment,
     RedTeamVerdict,
@@ -40,8 +42,9 @@ from foundry.models import (
     TrainingCode,
 )
 from foundry.prompting import read_context
-from foundry.teams.experiment_runner import CodeRequest
-from foundry.teams.modeling_team import PlanContext
+from foundry.teams.experiment_runner import SUPPORTED_MODEL_FAMILIES, CodeRequest
+from foundry.teams.lessons import LessonContext
+from foundry.teams.modeling_team import PlanContext, ScoutContext
 from foundry.teams.principal import SupervisorContext
 from foundry.teams.red_team import RedTeamContext
 from foundry.teams.reporter import ReportContext
@@ -144,12 +147,27 @@ _FAMILY_SEQUENCE: list[_ModelFamily] = [
 def _experiment_plan(prompt: str) -> ExperimentPlan:
     """Proposes up to max_experiments_per_iteration DISTINCT families per pass (M4: one planning
     pass now fans out via Send, so a single-spec plan would leave the fan-out with nothing to
-    parallelize) — falls back to repeating the last family once every family has been tried."""
+    parallelize) — falls back to repeating the last family once every family has been tried.
+
+    M7: context.recommended_families (the literature scout's ApproachMemo — see _approach_memo
+    below) are tried FIRST, ahead of the default escalation order, and context.avoid_families are
+    dropped from both lists entirely. This is what makes SPEC's "run #2 differs because of run
+    #1's lessons" observable with no API key: a family a prior run's Lesson recommends jumps the
+    queue here, on top of the same default order M4 already had."""
     context = read_context(prompt, PlanContext)
-    remaining: list[_ModelFamily] = [
-        f for f in _FAMILY_SEQUENCE if f not in context.prior_model_families
+    avoid = set(context.avoid_families)
+    tried = set(context.prior_model_families)
+    preferred: list[_ModelFamily] = [
+        cast(_ModelFamily, f)
+        for f in context.recommended_families
+        if f in SUPPORTED_MODEL_FAMILIES and f not in tried and f not in avoid
     ]
-    families = remaining[: settings.max_experiments_per_iteration] or [_FAMILY_SEQUENCE[-1]]
+    remaining: list[_ModelFamily] = [
+        f for f in _FAMILY_SEQUENCE if f not in tried and f not in avoid and f not in preferred
+    ]
+    families = (preferred + remaining)[: settings.max_experiments_per_iteration] or [
+        _FAMILY_SEQUENCE[-1]
+    ]
     specs = [
         ExperimentSpec(
             experiment_id="stub",  # overwritten by foundry/teams/modeling_team.py's code guard
@@ -414,6 +432,52 @@ def _report_narrative(prompt: str) -> ReportNarrative:
     return ReportNarrative(summary=summary, recommendation=recommendation)
 
 
+# --- ApproachMemo (M7) -----------------------------------------------------------------------
+
+
+def _approach_memo(prompt: str) -> ApproachMemo:
+    """Deterministic over context.past_best_family — itself code-computed by
+    foundry/teams/modeling_team.py::_best_past_family from PAST runs' persisted Lesson records,
+    never estimated here. Recommends nothing when there is no prior lesson (run #1 on a fresh
+    dataset), so _experiment_plan's default escalation order is unaffected; recommends the past
+    winner first otherwise, which is exactly what makes a second run's plan differ."""
+    context = read_context(prompt, ScoutContext)
+    if context.past_best_family and context.past_best_family not in context.prior_model_families:
+        return ApproachMemo(
+            summary=(
+                f"{len(context.past_lessons)} prior lesson(s) on this dataset favor "
+                f"{context.past_best_family}; try it first."
+            ),
+            recommended_families=[cast(_ModelFamily, context.past_best_family)],
+        )
+    return ApproachMemo(
+        summary="No prior lesson recommends a specific family for this dataset; defaulting to "
+        "the standard escalation order.",
+    )
+
+
+# --- LessonDraft (M7) -------------------------------------------------------------------------
+
+
+def _lesson_draft(prompt: str) -> LessonDraft:
+    context = read_context(prompt, LessonContext)
+    if context.best_metric_value is None:
+        return LessonDraft(
+            text=(
+                f"No experiment succeeded on this dataset (stop reason: {context.stop_reason}); "
+                "investigate the self-debug traceback before the next run."
+            )
+        )
+    text = (
+        f"The best run reached {context.primary_metric}={context.best_metric_value:.4f} over "
+        f"{context.n_successful}/{context.n_experiments} successful experiment(s)"
+    )
+    if context.n_invalidated:
+        text += f", after the red team invalidated {context.n_invalidated} candidate(s)"
+    text += f"; stop reason: {context.stop_reason}."
+    return LessonDraft(text=text)
+
+
 # --- registration ---------------------------------------------------------------------------
 
 
@@ -422,11 +486,13 @@ def register_canned_responses(client: StubClient) -> None:
     client.register(LeakageReport, _leakage_report)
     client.register(CleaningPlan, _cleaning_plan)
     client.register(CVStrategy, _cv_strategy)
+    client.register(ApproachMemo, _approach_memo)
     client.register(ExperimentPlan, _experiment_plan)
     client.register(TrainingCode, _training_code)
     client.register(PrincipalDirective, _principal_directive)
     client.register(RedTeamVerdict, _red_team_verdict)
     client.register(ReportNarrative, _report_narrative)
+    client.register(LessonDraft, _lesson_draft)
 
 
 def install_canned_responses() -> None:

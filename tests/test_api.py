@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 
 from app.main import create_app
 from foundry.config import settings
@@ -29,6 +30,7 @@ from foundry.models import SandboxResult
 from foundry.stubs import register_canned_responses
 from foundry.teams import data_team as data_team_module
 from foundry.teams import experiment_runner as runner_module
+from foundry.teams import lessons as lessons_module
 from foundry.teams import modeling_team as modeling_team_module
 from foundry.teams import principal as principal_module
 from foundry.teams import red_team as red_team_module
@@ -38,7 +40,7 @@ from foundry.tools.profiler import RawColumnStats, RawProfile
 
 _ALL_TEAM_MODULES = (
     principal_module, data_team_module, modeling_team_module, runner_module, red_team_module,
-    reporter_module,
+    reporter_module, lessons_module,
 )
 
 _RAW_PROFILE = RawProfile(
@@ -111,7 +113,10 @@ def _wait_until(
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> Any:
     _use_stub_everywhere(monkeypatch)
-    test_app = create_app(checkpointer_factory=lambda: nullcontext(InMemorySaver()))
+    test_app = create_app(
+        checkpointer_factory=lambda: nullcontext(InMemorySaver()),
+        store_factory=lambda: nullcontext(InMemoryStore()),
+    )
     with TestClient(test_app) as test_client:
         yield test_client
 

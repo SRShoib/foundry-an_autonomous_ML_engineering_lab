@@ -22,7 +22,14 @@ downstream will ever recompute it again. render_report takes the topped-up total
 never the stale, pre-reporter-cost figure.
 
 Returns a plain dict rather than a Command: reporter is the one team with a single, static
-destination (END), wired with a plain add_edge in foundry/graph.py.
+destination — foundry/teams/lessons.py's lesson_writer, via final_gate, wired with plain add_edges
+in foundry/graph.py.
+
+M7: render_report's "## Lessons applied" section renders state["approach_memo"] — what the
+literature scout (foundry/teams/modeling_team.py) recommended THIS run, sourced from PAST runs'
+lessons. That is distinct from foundry/teams/lessons.py's own "## Lessons learned" section,
+appended after final_gate: the lesson this run is contributing for FUTURE runs. Both are
+code-driven renders of already-computed state; neither is reporter's own LLM narrative.
 """
 
 from __future__ import annotations
@@ -80,6 +87,18 @@ def render_report(
         "## Summary",
         narrative.summary,
         "",
+    ]
+    memo = state["approach_memo"]
+    if memo is not None and (memo.recommended_families or memo.avoid_families):
+        lines += ["## Lessons applied", "", memo.summary]
+        if memo.recommended_families:
+            lines.append(f"- Recommended families: {', '.join(memo.recommended_families)}")
+        if memo.avoid_families:
+            lines.append(f"- Avoided families: {', '.join(memo.avoid_families)}")
+        if memo.cautions:
+            lines.append(f"- Cautions: {memo.cautions}")
+        lines.append("")
+    lines += [
         "## Leaderboard",
         "",
         "| rank | experiment | metric | value | mlflow run |",

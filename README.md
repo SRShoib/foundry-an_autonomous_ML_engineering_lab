@@ -6,7 +6,7 @@ trained model, an experiment report, and a model card. See [SPEC.md](SPEC.md) fo
 architecture and milestone plan; see [CLAUDE.md](CLAUDE.md) for project conventions and
 guardrails.
 
-This repo is built one milestone at a time. **Status: M6 (control) complete.**
+This repo is built one milestone at a time. **Status: M7 (memory) complete.**
 
 ## Requirements
 
@@ -39,6 +39,9 @@ make run TASK=churn --auto-approve   # same, but answers every gate with approve
                               # unattended (CI/demos)
 make run TASK=churn_leaky    # M5 fixture: a real leak the data team's own scan can't see —
                               # watch the report show the red team catch and remediate it
+make run TASK=churn --auto-approve   # run it TWICE in a row (same Postgres store) to see M7:
+                              # run #2's report gains a "## Lessons applied" section and its
+                              # first-tried model family differs from run #1's
 
 make api                     # FastAPI control plane on :8000 — POST /runs, GET /runs/{id},
                               # GET /runs/{id}/events (SSE activity feed), GET /approvals,
@@ -187,3 +190,48 @@ MLflow UI: http://localhost:5000
   whether the current leg's background thread is still alive (a brand-new thread_id's empty
   snapshot must read as "running", never as a false "completed", until that leg actually
   finishes — caught by `tests/test_api.py`'s full round-trip test, not by inspection).
+- **Memory is a LangGraph Store, not a FoundryState field**: `state["lessons"]` only ever holds
+  the current run's own distilled text (SPEC's `list[str]`); cross-run recall needs something a
+  new thread's fresh checkpoint doesn't reset, so `foundry/tools/memory.py` reads/writes a
+  `BaseStore` compiled into the graph (`foundry/graph.py::build_graph(checkpointer, store)`),
+  namespaced `("foundry", "lessons", dataset_ref)` — cross-thread as SPEC requires, but scoped
+  per dataset so `churn_leaky`'s findings never bleed into `churn`'s plan.
+- **No embedding index, so `search()` never passes `query=`**: verified against the installed
+  LangGraph 1.2.9 that a store with no embedding config configured does *not* raise on
+  `store.search(ns, query=...)` — it silently returns unranked results, which would look like
+  semantic search while doing nothing. Retrieval is namespace-prefix plus an explicit sort by
+  `Lesson.created_at` in Python instead, fetched well above the caller's cap first so the
+  store's own `limit` (applied before any ordering) can never truncate away the newest records.
+- **Every fact on a persisted `Lesson` is code-derived, never LLM-authored**: `LessonDraft`, the
+  lesson-writer's only LLM output, carries prose alone — the same no-numeric-fields guarantee
+  `ReportNarrative` and `RedTeamVerdict` already have. `best_model_family`/`best_metric_*` come
+  from cross-referencing `state["leaderboard"]`'s winner against `state["experiment_plan"]`, the
+  same "code owns the floor" split applied one hop further downstream: a future run's literature
+  scout trusts these fields to recommend a family, so a model-invented number here would defeat
+  the guardrail as surely as inventing one directly.
+- **`lesson_writer` sits after `final_gate`, not inside `reporter`**: a node interrupted by
+  `interrupt()` commits nothing and replays in full on resume (`foundry/gates.py`'s own finding);
+  placing the lesson's LLM call after the gate means it is never re-billed across a pause/resume
+  round trip, and `Lesson.signed_off` reflects the human's actual decision rather than being
+  written before it exists. Lessons are written regardless of that decision — a declined run
+  still teaches what the red team caught — but `signed_off=False` keeps its winner out of a
+  later run's recommendation. Both `reporter` and `lesson_writer` bill a real LLM call at the
+  very end of the graph, so `spent_usd` needs a top-up at each of them in turn, not just the
+  first — `tests/test_lessons.py` has a regression test for exactly this.
+- **`modeling_team` became a real subgraph the moment it grew a second step**: mirroring
+  `foundry/teams/data_team.py`'s own private-state/output-keys/`lru_cache` pattern exactly.
+  `literature_scout` runs the LLM at most once per run — `state["approach_memo"]` is a plain,
+  never-reset channel, so every planning pass after the first already has one and skips the call
+  — which is correct, not just cheap: the memo's only input (past runs' lessons) cannot change
+  mid-run, since lessons are only ever written once, at the very end, strictly after this run's
+  own planning is done.
+- **Code owns the family list, the scout only reorders it**: `ApproachMemo.recommended_families`/
+  `avoid_families` reuse `ExperimentSpec.model_family`'s own type so a scout can never recommend
+  a family `experiment_planner` isn't allowed to plan, but `literature_scout` still re-filters
+  both against `SUPPORTED_MODEL_FAMILIES` before trusting them, and `experiment_planner` itself
+  hard-drops any avoided family from the LLM's proposed plan regardless of what it proposed — the
+  same "LLM proposes, code disposes" split already applied to unsupported families.
+- **Web search is out of scope for M7**: SPEC names `web_search(query)` as a literature-scout
+  tool, but M7's own milestone line is memory-only, and wiring a real search API would add a
+  second, un-stubbable external dependency, breaking the "graph runs with no API keys" guarantee
+  for a tool no milestone's definition of done actually requires yet. Left for a later milestone.
