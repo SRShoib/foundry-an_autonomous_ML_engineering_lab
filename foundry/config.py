@@ -87,6 +87,23 @@ class Settings(BaseSettings):
     audit_duplicate_row_rate: float = 0.05
     audit_suspicious_metric_ceiling: float = 0.999
 
+    # Red team on/off (foundry/teams/principal.py, M8) — SPEC's eval ablation: "red team on/off".
+    # Read in exactly one place, the audit gate in foundry/teams/principal.py::principal, the same
+    # single-read-site shape foundry/graph.py's build_graph(store=None) already gives the memory
+    # on/off ablation. False means every successful experiment is treated as already cleared —
+    # red_team is simply never routed to, nothing else in the graph changes.
+    red_team_enabled: bool = True
+
+    # M8 eval harness (foundry/eval/, M8) — the model-split-vs-uniform ablation's projected-cost
+    # column. StubClient calls report no real token usage (foundry/llm.py's MeteredClient prices
+    # them at a flat rate instead), so comparing the model split against a uniform-cheap
+    # configuration offline needs a documented, code-owned nominal token count per LLM call rather
+    # than an invented dollar figure — real per-role call counts (CostEntry.agent_role) times these
+    # nominal counts times foundry/tools/cost.py's real published $/Mtok table. Labeled "projected"
+    # everywhere it's rendered; never presented as a measured spend.
+    eval_nominal_input_tokens: int = 1500
+    eval_nominal_output_tokens: int = 400
+
     # Cost model (foundry/tools/cost.py, foundry/llm.py, M4). Real Anthropic calls are priced
     # from actual AIMessage.usage_metadata against foundry/tools/cost.py's per-model $/token
     # table; cost_per_llm_call_usd is the flat per-call fallback used only by StubClient, which

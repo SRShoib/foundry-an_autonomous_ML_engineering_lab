@@ -197,8 +197,14 @@ def principal(
 
     # Audit gate: any successful experiment the red team hasn't yet rendered a verdict for must
     # be audited before target_met (or anything else reading a metric) is ever checked — a leaky
-    # 0.99 must never end the run un-audited.
-    if pending_candidates(state["experiments"], frozenset(state["audited_experiments"])):
+    # 0.99 must never end the run un-audited. M8: settings.red_team_enabled is SPEC's eval
+    # ablation switch ("red team on/off") — when False, red_team is simply never routed to, and
+    # _invalidated_ids stays permanently empty (state["invalidations"] never gets appended to), so
+    # _cleared/leaderboard/best_value fall back to every successful experiment unconditionally,
+    # exactly what "no red team" means. Nothing else in the graph changes.
+    if settings.red_team_enabled and pending_candidates(
+        state["experiments"], frozenset(state["audited_experiments"])
+    ):
         return Command(
             goto="red_team",
             update={

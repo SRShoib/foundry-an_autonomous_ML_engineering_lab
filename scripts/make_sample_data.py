@@ -1,7 +1,7 @@
-"""Regenerates data/samples/churn.csv and data/samples/churn_leaky.csv (SPEC M8: "3 small bundled
-tabular tasks (data + ground truth)"; M3 ships the first one). Both CSVs are committed — this
-script exists so the generative model is reproducible and documented, not because the repo
-depends on regenerating either at install time.
+"""Regenerates data/samples/{churn,churn_leaky,energy}.csv (SPEC M8: "3 small bundled tabular
+tasks (data + ground truth)"; M3 shipped the first one). All three CSVs are committed — this
+script exists so each generative model is reproducible and documented, not because the repo
+depends on regenerating any of them at install time.
 
 churn.csv: every column is deliberately awkward in one specific way a real churn extract would
 be: customer_id is a row-unique identifier (the leakage trap the data team must catch, not drop
@@ -22,6 +22,18 @@ imperfect leakage, not a literal `churned` copy. It is invisible to foundry/tool
 leak heuristic (target_auc is computed only for numeric columns) and survives cleaning
 untouched; foundry/tools/audit.py's target-encoded AUC is what actually catches it — see
 data/samples/README.md for the measured numbers.
+
+energy.csv (M8's third showcase task, the first REGRESSION task this repo ships): building_id is
+the same row-unique leakage trap customer_id is; avg_setpoint_c is missing whenever hvac_type ==
+"none" (there is no setpoint to report — structural, mirrors avg_monthly_gb); solar_kw is missing
+whenever has_smart_meter == 0 (a dumb meter can't report solar generation — a second, independent
+structural-missingness pattern). monthly_kwh is generated from a linear model with a genuine
+interaction term (large floor area combined with poor insulation is disproportionately worse than
+either alone), plus gaussian noise, so — same story as churn — a linear baseline captures most but
+not all of the signal. See data/samples/README.md for the measured CV rmse and the measured
+audit-evidence margin below foundry/config.py's audit_leak_auc_threshold (every legitimate column
+must stay comfortably below it, or the red team would invalidate every honest experiment on this
+dataset).
 """
 
 from __future__ import annotations
@@ -35,8 +47,11 @@ SEED = 20260726
 N_ROWS = 1200
 LEAKY_SEED = 20260727
 LEAKY_N_ROWS = 300
+ENERGY_SEED = 20260728
+ENERGY_N_ROWS = 900
 OUT_PATH = Path(__file__).resolve().parent.parent / "data" / "samples" / "churn.csv"
 LEAKY_OUT_PATH = Path(__file__).resolve().parent.parent / "data" / "samples" / "churn_leaky.csv"
+ENERGY_OUT_PATH = Path(__file__).resolve().parent.parent / "data" / "samples" / "energy.csv"
 
 
 def make_churn_frame(rng: np.random.Generator, n_rows: int = N_ROWS) -> pd.DataFrame:
@@ -128,6 +143,77 @@ def add_retention_call_leak(frame: pd.DataFrame, rng: np.random.Generator) -> pd
     return frame
 
 
+def make_energy_frame(rng: np.random.Generator, n_rows: int = ENERGY_N_ROWS) -> pd.DataFrame:
+    building_id = [f"BLDG-{i:05d}" for i in range(1, n_rows + 1)]
+    floor_area_m2 = np.round(rng.uniform(45, 480, size=n_rows), 1)
+    n_occupants = np.clip(rng.poisson(3.2, size=n_rows), 1, 12)
+    building_age_years = rng.integers(0, 81, size=n_rows)
+
+    hvac_type = rng.choice(
+        ["electric", "gas", "heat_pump", "none"], size=n_rows, p=[0.30, 0.35, 0.25, 0.10]
+    )
+    insulation_grade = rng.choice(["poor", "average", "good"], size=n_rows, p=[0.30, 0.45, 0.25])
+    has_smart_meter = rng.binomial(1, 0.55, size=n_rows)
+
+    avg_setpoint_c_full = np.round(rng.normal(20.5, 1.8, size=n_rows), 1)
+    solar_kw_full = np.round(
+        np.where(rng.uniform(size=n_rows) < 0.75, 0.0, rng.gamma(2.0, 1.5, size=n_rows)), 2
+    )
+
+    poor = insulation_grade == "poor"
+    good = insulation_grade == "good"
+    hvac_effect = np.select(
+        [
+            hvac_type == "electric",
+            hvac_type == "gas",
+            hvac_type == "heat_pump",
+            hvac_type == "none",
+        ],
+        [55.0, 10.0, -35.0, -85.0],
+    )
+    insulation_effect = np.select([poor, good], [70.0, -35.0], default=15.0)
+    setpoint_effect = np.where(hvac_type != "none", 7.0 * (avg_setpoint_c_full - 20.0), 0.0)
+    # Genuine interaction: a large, poorly-insulated building loses disproportionately more heat
+    # than either factor alone predicts — the same "not quite linear" shape churn's
+    # new_on_month_to_month term has.
+    interaction = 0.08 * floor_area_m2 * poor
+
+    monthly_kwh = (
+        140
+        + 0.55 * floor_area_m2
+        + 14.0 * n_occupants
+        + 0.45 * building_age_years
+        + insulation_effect
+        + hvac_effect
+        + setpoint_effect
+        + interaction
+        - 2.2 * solar_kw_full
+        + rng.normal(0, 70, size=n_rows)
+    )
+    monthly_kwh = np.round(np.clip(monthly_kwh, 40, None), 1)
+
+    avg_setpoint_c = avg_setpoint_c_full.astype(object)
+    avg_setpoint_c[hvac_type == "none"] = np.nan
+
+    solar_kw = solar_kw_full.astype(object)
+    solar_kw[has_smart_meter == 0] = np.nan
+
+    return pd.DataFrame(
+        {
+            "building_id": building_id,
+            "floor_area_m2": floor_area_m2,
+            "n_occupants": n_occupants,
+            "building_age_years": building_age_years,
+            "hvac_type": hvac_type,
+            "insulation_grade": insulation_grade,
+            "avg_setpoint_c": avg_setpoint_c,
+            "solar_kw": solar_kw,
+            "has_smart_meter": has_smart_meter,
+            "monthly_kwh": monthly_kwh,
+        }
+    )
+
+
 def main() -> None:
     rng = np.random.default_rng(SEED)
     frame = make_churn_frame(rng)
@@ -146,6 +232,15 @@ def main() -> None:
     print(f"wrote {len(leaky_frame)} rows to {LEAKY_OUT_PATH}")
     print(f"churn rate: {leaky_frame['churned'].mean():.3f}")
     print(leaky_frame["retention_call_outcome"].value_counts())
+
+    energy_rng = np.random.default_rng(ENERGY_SEED)
+    energy_frame = make_energy_frame(energy_rng)
+    ENERGY_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    energy_frame.to_csv(ENERGY_OUT_PATH, index=False)
+    print(f"wrote {len(energy_frame)} rows to {ENERGY_OUT_PATH}")
+    print(f"monthly_kwh: mean={energy_frame['monthly_kwh'].mean():.1f}")
+    print(f"avg_setpoint_c missing: {energy_frame['avg_setpoint_c'].isna().sum()}")
+    print(f"solar_kw missing: {energy_frame['solar_kw'].isna().sum()}")
 
 
 if __name__ == "__main__":

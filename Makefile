@@ -1,4 +1,4 @@
-.PHONY: up down sandbox-build smoke sample-data run api lint fmt typecheck test
+.PHONY: up down sandbox-build smoke sample-data run api lint fmt typecheck test eval
 
 up:
 	docker compose up -d --build --wait
@@ -32,3 +32,6 @@ typecheck:
 
 test:
 	uv run pytest
+
+eval:
+	uv run python -m foundry.eval

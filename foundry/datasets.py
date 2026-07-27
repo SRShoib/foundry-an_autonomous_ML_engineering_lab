@@ -60,6 +60,24 @@ REGISTRY: dict[str, DatasetSpec] = {
             "misses — see data/samples/README.md for the measured numbers."
         ),
     ),
+    "energy": DatasetSpec(
+        name="energy",
+        path=settings.data_dir / "energy.csv",
+        target_column="monthly_kwh",
+        task_type="regression",
+        primary_metric="rmse",
+        target_value=65.0,
+        description=(
+            "Synthetic building energy-usage dataset, 900 rows -- M8's showcase regression task. "
+            "Structural missingness in avg_setpoint_c (no heating system to set a point for) and "
+            "solar_kw (dumb meters can't report solar generation) forces real imputation; "
+            "building_id is a row-unique identifier the data team must flag as a leak, not a "
+            "feature. A linear model captures most of monthly_kwh's variance but not the "
+            "floor-area/insulation interaction term, so target_value=65.0 sits below every "
+            "measured baseline rmse (see data/samples/README.md) for the same reachable-but-"
+            "unmet reason churn's target_value=0.90 does."
+        ),
+    ),
 }
 
 

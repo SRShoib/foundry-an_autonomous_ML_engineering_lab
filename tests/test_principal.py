@@ -162,6 +162,25 @@ def test_audit_gate_routes_to_red_team_before_target_met(
     assert _update(command)["next_team"] == "red_team"
 
 
+def test_red_team_enabled_false_skips_the_audit_gate_entirely(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M8's red-team-on/off ablation switch (SPEC: "red team on/off"). With
+    settings.red_team_enabled=False, an un-audited 0.99 that would normally route to red_team
+    first (see test_audit_gate_routes_to_red_team_before_target_met) instead goes straight to
+    target_met -- red_team is simply never routed to, and the result counts as cleared."""
+    monkeypatch.setattr(settings, "red_team_enabled", False)
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _AssertNotCalledLLM())
+    result = ExperimentResult(
+        experiment_id="exp-001", status="success", metrics={"roc_auc": 0.99}, cost_usd=0.1,
+        duration_s=1.0,
+    )
+    state = _state(data_profile=_PROFILE, experiments=[result])
+    command = principal_module.principal(state)
+    assert command.goto == "reporter"
+    assert _update(command)["stop_reason"] == "target_met"
+
+
 def test_diminishing_returns_guard_on_experiment_count_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

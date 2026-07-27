@@ -93,9 +93,23 @@ class CodeRequest(BaseModel):
     previous_error: str | None = None
 
 
+def _family_description(model_family: str, task_type: str) -> str:
+    """model_family names a model FAMILY, not a concrete sklearn class — foundry/stubs.py's
+    per-(family, task_type) estimator table is the code-owned source of truth for which class
+    that means (M8: adding foundry/datasets.py's regression task exposed that "logistic_regression"
+    is ambiguous read literally against a continuous target). This is prompt clarity for the real
+    LLM path only: on a regression task, name the family's actual regression counterpart instead
+    of the word "logistic" so a real model never wastes a self-debug attempt trying to fit
+    LogisticRegression against a continuous y."""
+    if task_type == "regression" and model_family == "logistic_regression":
+        return "a linear regression model (the logistic_regression family's regression counterpart)"
+    return f"a {model_family} model"
+
+
 def build_code_prompt(request: CodeRequest) -> str:
     instructions = (
-        f"Write a Python training script that trains a {request.model_family} model on the "
+        f"Write a Python training script that trains "
+        f"{_family_description(request.model_family, request.task_type)} on the "
         f"dataset at {request.dataset_path} to predict {request.target_column} "
         f"({request.task_type}), evaluated with {request.cv_kind} using {request.cv_n_splits} "
         f"splits and random_state={request.random_seed}. Drop these columns before fitting: "
