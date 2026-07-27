@@ -17,6 +17,7 @@ from typing_extensions import TypedDict
 
 from foundry.models import (
     CleaningPlan,
+    CostEntry,
     CVStrategy,
     DataProfile,
     ExperimentResult,
@@ -46,6 +47,11 @@ class FoundryState(TypedDict):
     experiments: Annotated[list[ExperimentResult], operator.add]
     leaderboard: list[LeaderboardEntry]
     invalidations: list[RedTeamFinding]
+
+    # Add-reducer (M4): parallel Send-fanned-out experiment_runner branches each contribute their
+    # own entries in the same superstep — spent_usd is derived from this sum by the principal
+    # rather than being written directly, which would race under concurrent branches.
+    costs: Annotated[list[CostEntry], operator.add]
 
     lessons: Annotated[list[str], operator.add]
 

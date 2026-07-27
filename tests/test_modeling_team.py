@@ -21,6 +21,7 @@ _ModelFamily = Literal[
 class _FixedPlanLLM:
     def __init__(self, plan: ExperimentPlan) -> None:
         self._plan = plan
+        self.costs: list[Any] = []
 
     def structured(self, prompt: str, schema: type, *, system: str | None = None) -> Any:
         return self._plan
@@ -45,6 +46,7 @@ def _state(**overrides: Any) -> FoundryState:
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "costs": [],
         "lessons": [],
         "report_md": None,
         "model_card_md": None,

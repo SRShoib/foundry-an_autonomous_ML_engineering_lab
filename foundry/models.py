@@ -200,3 +200,20 @@ class HumanDecision(BaseModel):
     approved: bool
     note: str = ""
     timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class CostEntry(BaseModel):
+    """One priced unit of work (M4: "per-agent cost logging"). Never LLM-authored — built by
+    foundry/llm.py from real AIMessage.usage_metadata (or the stub's flat rate) and by
+    foundry/teams/experiment_runner.py from sandbox duration. spent_usd is the sum of these,
+    recomputed by the principal each turn rather than incrementally written by parallel Send
+    branches (see foundry/teams/principal.py) — the state field this rolls up into,
+    FoundryState.costs, is an add-reducer specifically so concurrent runners can each contribute
+    without a lost-update race."""
+
+    agent_role: Literal["principal", "red_team", "worker", "sandbox"]
+    model: str
+    kind: Literal["llm", "sandbox"]
+    input_tokens: int = 0
+    output_tokens: int = 0
+    usd: float
