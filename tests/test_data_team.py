@@ -81,6 +81,7 @@ def _empty_data_team_state(**overrides: Any) -> DataTeamState:
         "dataset_ref": "churn",
         "data_profile": None,
         "leakage_findings": [],
+        "known_high_severity_columns": [],
         "cleaning_plan": None,
         "cv_strategy": None,
         "errors": [],
@@ -229,6 +230,79 @@ def test_cleaner_force_drops_high_severity_leakage_findings(
     assert "leaky_col" in cast(CleaningPlan, update["cleaning_plan"]).drop_columns
 
 
+def test_cleaner_force_drops_known_high_severity_columns_from_a_prior_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M5 regression test: a remediation re-run's own THIS-pass leakage_findings is empty (a
+    categorical leak the profiler's heuristics can't rediscover), but known_high_severity_columns
+    — populated by data_team_node from the PARENT's cumulative state, which includes anything the
+    red team found on a prior pass — must still force the drop. Without this, routing back to
+    data_team for remediation would silently do nothing (see foundry/teams/red_team.py)."""
+    data_profile = DataProfile(
+        n_rows=10,
+        n_cols=2,
+        target_column="churned",
+        task_type="binary_classification",
+        columns=[
+            ColumnProfile(
+                name="churned", dtype="int64", n_missing=0, pct_missing=0.0, n_unique=2,
+                is_potential_leak=False,
+            ),
+            ColumnProfile(
+                name="retention_call_outcome", dtype="object", n_missing=0, pct_missing=0.0,
+                n_unique=3, is_potential_leak=False,
+            ),
+        ],
+    )
+    empty_plan = CleaningPlan(
+        drop_columns=[], numeric_impute="median", categorical_impute="most_frequent",
+        rationale="nothing to drop",
+    )
+    monkeypatch.setattr(data_team, "get_llm", lambda role: _FakeLLM(empty_plan))
+
+    update = cleaner(
+        _empty_data_team_state(
+            data_profile=data_profile,
+            leakage_findings=[],  # this pass's own fresh re-profiling found nothing
+            known_high_severity_columns=["retention_call_outcome"],
+        )
+    )
+    assert "retention_call_outcome" in cast(CleaningPlan, update["cleaning_plan"]).drop_columns
+
+
+def test_data_team_node_populates_known_high_severity_columns_from_parent_leakage_findings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wrapper, not the subgraph, is what reads the parent's cumulative
+    state["leakage_findings"] — see foundry/teams/data_team.py's data_team_node."""
+    monkeypatch.setattr(data_team.profiler_tool, "profile", lambda dataset, **kw: _raw_profile())
+
+    captured: dict[str, Any] = {}
+    real_build = data_team.build_data_team()
+
+    class _CapturingGraph:
+        def invoke(self, sub_input: Any) -> Any:
+            captured["known_high_severity_columns"] = sub_input["known_high_severity_columns"]
+            return real_build.invoke(sub_input)
+
+    monkeypatch.setattr(data_team, "build_data_team", lambda: _CapturingGraph())
+
+    state: FoundryState = {
+        "goal": "predict churn", "dataset_ref": "churn", "budget_usd": 20.0, "spent_usd": 0.0,
+        "data_profile": None,
+        "leakage_findings": [
+            LeakageFinding(column="retention_call_outcome", reason="red team", severity="high"),
+            LeakageFinding(column="customer_id", reason="row-unique id", severity="low"),
+        ],
+        "cleaning_plan": None, "cv_strategy": None, "experiment_plan": [], "experiments": [],
+        "leaderboard": [], "invalidations": [], "audited_experiments": [], "costs": [],
+        "lessons": [], "report_md": None, "model_card_md": None, "human_decisions": [],
+        "errors": [], "iteration_count": 0, "next_team": None, "stop_reason": None,
+    }
+    data_team_node(state)
+    assert captured["known_high_severity_columns"] == ["retention_call_outcome"]
+
+
 def test_splitter_clamps_n_splits_and_forces_stratified_for_classification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -268,6 +342,7 @@ def test_data_team_node_populates_all_output_keys(monkeypatch: pytest.MonkeyPatc
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "audited_experiments": [],
         "costs": [],
         "lessons": [],
         "report_md": None,

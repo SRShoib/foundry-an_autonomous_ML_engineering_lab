@@ -9,7 +9,11 @@ The leaderboard itself is read from state, not recomputed: foundry/teams/princip
 single place that ranks experiments (SPEC M4 — "leaderboard" is live state maintained every
 principal turn, not a reporter-only computation), and reporter is always reached through
 principal's terminal `_stop()` call, so state["leaderboard"] is guaranteed fresh by the time this
-runs (see foundry/leaderboard.py for the ranking logic itself).
+runs (see foundry/leaderboard.py for the ranking logic itself). M5: that same principal-owned
+computation already excludes red-team-invalidated experiments, so `board`/`best` here are always
+red-team-cleared by construction — render_report separately renders the full audit trail from
+state["invalidations"], invalidated or not, so a reader can see what was caught, not just what
+survived.
 
 spent_usd gets one final top-up here: reporter's own LLM call happens strictly after principal's
 last turn, so its cost is not yet folded into state["spent_usd"] when this runs, and nothing
@@ -97,6 +101,13 @@ def render_report(
         lines.append("| — | — |")
 
     lines += ["", "## Recommendation", narrative.recommendation]
+    if state["invalidations"]:
+        lines += ["", "## Red team findings", ""]
+        for finding in state["invalidations"]:
+            lines.append(
+                f"- **{finding.experiment_id}** — {finding.verdict} ({finding.category}): "
+                f"{finding.explanation} _Recommendation: {finding.recommendation}_"
+            )
     if state["errors"]:
         lines += ["", "## Errors encountered", *(f"- {error}" for error in state["errors"])]
     return "\n".join(lines)
@@ -107,7 +118,16 @@ def render_model_card(
 ) -> str:
     lines = [f"# Model Card — {state['goal']}", ""]
     if best is None:
-        lines.append("No successful experiment produced a model.")
+        invalidated_ids = {
+            f.experiment_id for f in state["invalidations"] if f.verdict == "invalidated"
+        }
+        if invalidated_ids:
+            lines.append(
+                "No model survives red team review — every successful experiment was "
+                "invalidated. See the report's Red team findings section."
+            )
+        else:
+            lines.append("No successful experiment produced a model.")
     else:
         result = next(r for r in state["experiments"] if r.experiment_id == best.experiment_id)
         lines += [
@@ -115,6 +135,7 @@ def render_model_card(
             f"**{best.primary_metric_name}:** {best.primary_metric_value:.4f}",
             f"**MLflow run:** {best.mlflow_run_id or '—'}",
             f"**Self-debug attempts used:** {result.attempts}",
+            "**Red team:** cleared — no open invalidation on this experiment.",
             "",
             "## Metrics",
             "",

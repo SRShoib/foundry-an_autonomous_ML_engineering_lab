@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Literal
 
 from langgraph.types import Command
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from foundry import leaderboard
 from foundry.config import settings
@@ -46,6 +46,10 @@ class PlanContext(BaseModel):
     prior_experiments: int
     prior_model_families: list[str]
     best_metric_so_far: float | None = None
+    # M5: what the red team has invalidated so far, so a replacement spec is planned in light of
+    # the invalidation (e.g. "don't repeat the family that just seed-hacked its way to 0.99")
+    # rather than by accident. Empty on every dataset the red team hasn't flagged anything on.
+    recent_invalidations: list[str] = Field(default_factory=list)
 
 
 def experiment_planner(state: FoundryState) -> Command[Literal["principal"]]:
@@ -58,7 +62,9 @@ def experiment_planner(state: FoundryState) -> Command[Literal["principal"]]:
         spec.model_family for spec in state["experiment_plan"] if spec.experiment_id in done_ids
     ]
 
-    best = leaderboard.best_result(state["experiments"], dataset.primary_metric)
+    invalidated = [f for f in state["invalidations"] if f.verdict == "invalidated"]
+    invalidated_ids = frozenset(f.experiment_id for f in invalidated)
+    best = leaderboard.best_result(state["experiments"], dataset.primary_metric, invalidated_ids)
     context = PlanContext(
         goal=state["goal"],
         task_type=data_profile.task_type if data_profile else dataset.task_type,
@@ -68,6 +74,7 @@ def experiment_planner(state: FoundryState) -> Command[Literal["principal"]]:
         prior_experiments=len(state["experiments"]),
         prior_model_families=prior_families,
         best_metric_so_far=best.metrics[dataset.primary_metric] if best else None,
+        recent_invalidations=[f"{f.category}: {f.recommendation}" for f in invalidated],
     )
     plan = llm.structured(
         with_context(

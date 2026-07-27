@@ -6,7 +6,7 @@ trained model, an experiment report, and a model card. See [SPEC.md](SPEC.md) fo
 architecture and milestone plan; see [CLAUDE.md](CLAUDE.md) for project conventions and
 guardrails.
 
-This repo is built one milestone at a time. **Status: M4 (scale-out) complete.**
+This repo is built one milestone at a time. **Status: M5 (red team) complete.**
 
 ## Requirements
 
@@ -31,8 +31,10 @@ make test                    # pytest — unit tests always run; @pytest.mark.do
                               # if the corresponding service is available, and skip
                               # automatically if not
 
-make run TASK=churn          # runs the V1 graph end-to-end on the bundled churn dataset;
+make run TASK=churn          # runs the graph end-to-end on the bundled churn dataset;
                               # writes artifacts/<thread_id>/{report.md,model_card.md}
+make run TASK=churn_leaky    # M5 fixture: a real leak the data team's own scan can't see —
+                              # watch the report show the red team catch and remediate it
 
 make down                    # stop postgres + mlflow
 ```
@@ -101,3 +103,35 @@ MLflow UI: http://localhost:5000
   — CLAUDE.md's sandbox guardrail runs training code with no network, so nothing inside the
   container could reach a tracking server anyway — and a tracking failure is caught and
   recorded as an error, never allowed to fail an otherwise-successful experiment.
+- **Why a red team at all**: nothing upstream of it checks whether a result is *real*. A leaky
+  experiment can post a near-perfect metric and win the leaderboard on nothing but a data bug.
+  `foundry/teams/red_team.py` audits every leaderboard candidate before the principal is allowed
+  to treat it as progress — the audit gate runs *before* `target_met` is ever checked
+  (`foundry/teams/principal.py`), so a leaky 0.99 can never end the run un-audited. `data/samples/
+  churn_leaky.csv` is the proof: a categorical column standing in for a retention call that only
+  happens after the churn decision is made — real, common leakage that survives the data team's
+  own scan untouched (`foundry/tools/profiler.py`'s `target_auc` is numeric-only) and is caught
+  only because `foundry/tools/audit.py` measures target association for categoricals too.
+- **Code measures, the strong model judges, a code floor is unappealable**: `audit()` runs in
+  the sandbox and produces `AuditReport` — pure measurement, no LLM. The `red_team` model
+  (`settings.red_team_model`, the same strong tier as the principal) renders a `RedTeamVerdict`
+  from that evidence. Then `_apply_floor` can push a permissive verdict from `valid` to
+  `invalidated` when hard evidence crosses a configured threshold, but never the reverse — the
+  model keeps real authority to invalidate on judgment alone, it just cannot talk its way past a
+  threshold that already fired. `tests/test_red_team.py`'s headline test hands the adjudicator
+  an LLM that always says "valid" and proves the floor invalidates anyway.
+- **Invalidation is recorded, never retro-written into the measurement**:
+  `state["experiments"]` is an `operator.add` channel — an entry can be appended, never edited —
+  so a verdict lives separately in `state["invalidations"]`, and `foundry/leaderboard.py` is the
+  one place that reconciles the two, excluding invalidated ids from ranking and from
+  `best_result`. `ExperimentResult.status` has no `"invalidated"` value for the same reason: a
+  status nothing ever writes invites a check that silently returns false.
+- **Remediation reuses the cleaner, not a new node**: an invalidated `"leakage"` finding with a
+  named column becomes a high-severity `LeakageFinding`, which `foundry/teams/data_team.py`'s
+  `cleaner` already force-drops. The principal routes back to `data_team` whenever a
+  high-severity finding isn't yet in `cleaning_plan.drop_columns` — the same "this cleaning_plan
+  can't be trusted yet" reason it routes there before any profile exists — and the re-run's
+  `known_high_severity_columns` (populated from the parent's *cumulative* findings, since a
+  remediation pass's own fresh re-profiling can't rediscover a categorical leak) makes the
+  condition false on the next turn. No remediation counter needed beyond the pre-existing
+  `principal_max_iterations` — the loop is self-terminating by construction.
