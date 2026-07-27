@@ -224,6 +224,34 @@ class HumanDecision(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
+class ApprovalRequest(BaseModel):
+    """The payload foundry/gates.py hands to interrupt() (M6: "both interrupt() gates are real
+    and checkpointer-backed"). Human-authored territory, not LLM-authored — never registered in
+    StubClient's schema registry (see the module docstring's two-group split): this describes
+    what code has already computed, for a human to read, not something a model is asked to
+    produce."""
+
+    gate: Literal["budget", "final"]
+    reason: str
+    spent_usd: float
+    budget_usd: float
+    projected_usd: float = 0.0
+    best_experiment_id: str | None = None
+    best_metric_name: str | None = None
+    best_metric_value: float | None = None
+    n_invalidated: int = 0
+    report_md: str | None = None
+
+
+class HumanResponse(BaseModel):
+    """The resume value a human supplies via Command(resume=...) — validated at the system
+    boundary (CLAUDE.md: "Only validate at system boundaries"), the FastAPI request body or the
+    CLI's stdin prompt, before foundry/gates.py trusts it."""
+
+    approved: bool
+    note: str = ""
+
+
 class CostEntry(BaseModel):
     """One priced unit of work (M4: "per-agent cost logging"). Never LLM-authored — built by
     foundry/llm.py from real AIMessage.usage_metadata (or the stub's flat rate) and by
