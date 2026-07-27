@@ -77,6 +77,7 @@ def _state(**overrides: Any) -> FoundryState:
         "leakage_findings": [],
         "cleaning_plan": None,
         "cv_strategy": None,
+        "approach_memo": None,
         "experiment_plan": [],
         "experiments": [],
         "leaderboard": [],
@@ -266,7 +267,7 @@ def test_send_payload_carries_cleaning_plan_and_cv_strategy(
     assert payload["prior_experiments"] == 0
 
 
-def test_routes_to_experiment_planner_when_plan_is_exhausted(
+def test_routes_to_modeling_team_when_plan_is_exhausted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directive = PrincipalDirective(should_continue=True, rationale="keep going")
@@ -286,7 +287,7 @@ def test_routes_to_experiment_planner_when_plan_is_exhausted(
         audited_experiments=["exp-001"],
     )
     command = principal_module.principal(state)
-    assert command.goto == "experiment_planner"
+    assert command.goto == "modeling_team"
 
 
 def test_spent_usd_is_derived_from_costs_not_stale_state_field(
@@ -319,7 +320,7 @@ def test_leaderboard_is_recomputed_every_turn_not_only_at_stop(
         data_profile=_PROFILE, experiments=[result], audited_experiments=["exp-001"]
     )
     command = principal_module.principal(state)
-    assert command.goto == "experiment_planner"
+    assert command.goto == "modeling_team"
     board = _update(command)["leaderboard"]
     assert len(board) == 1
     assert board[0].experiment_id == "exp-001"
@@ -358,7 +359,7 @@ def test_invalidated_experiment_is_excluded_from_leaderboard_and_does_not_stop_t
     assert update["leaderboard"] == []
     # No cleared candidate exists, so the run keeps looping instead of falsely stopping on the
     # invalidated 0.99's target_met — it proceeds to plan another experiment.
-    assert command.goto == "experiment_planner"
+    assert command.goto == "modeling_team"
 
 
 def test_unremediated_high_severity_leak_routes_back_to_data_team(

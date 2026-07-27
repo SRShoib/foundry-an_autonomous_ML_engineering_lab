@@ -57,7 +57,7 @@ def test_run_with_memory_checkpointer_writes_artifacts(
         def get_state(self, config: Any) -> Any:
             raise AssertionError("should not be called in run mode")
 
-    monkeypatch.setattr(cli, "build_graph", lambda checkpointer: _FakeGraph())
+    monkeypatch.setattr(cli, "build_graph", lambda checkpointer, store: _FakeGraph())
     monkeypatch.setattr(cli, "install_canned_responses", lambda: None)
 
     code = cli.main(["--task", "churn", "--checkpointer", "memory", "--thread-id", "t1"])
@@ -98,7 +98,7 @@ def test_auto_approve_answers_the_gate_without_prompting(
         def get_state(self, config: Any) -> Any:
             raise AssertionError("should not be called in run mode")
 
-    monkeypatch.setattr(cli, "build_graph", lambda checkpointer: _FakeGraph())
+    monkeypatch.setattr(cli, "build_graph", lambda checkpointer, store: _FakeGraph())
     monkeypatch.setattr(cli, "install_canned_responses", lambda: None)
 
     code = cli.main(
@@ -140,7 +140,7 @@ def test_paused_gate_without_auto_approve_or_a_tty_leaves_the_run_paused(
         def isatty(self) -> bool:
             return False
 
-    monkeypatch.setattr(cli, "build_graph", lambda checkpointer: _FakeGraph())
+    monkeypatch.setattr(cli, "build_graph", lambda checkpointer, store: _FakeGraph())
     monkeypatch.setattr(cli, "install_canned_responses", lambda: None)
     monkeypatch.setattr(cli.sys, "stdin", _NonTTYStdin())
 
@@ -164,7 +164,7 @@ def test_show_prints_persisted_report_without_invoking_the_graph(
         def get_state(self, config: Any) -> Any:
             return _FakeSnapshot()
 
-    monkeypatch.setattr(cli, "build_graph", lambda checkpointer: _FakeGraph())
+    monkeypatch.setattr(cli, "build_graph", lambda checkpointer, store: _FakeGraph())
 
     code = cli.main(["--show", "some-thread", "--checkpointer", "memory"])
     assert code == 0
@@ -184,7 +184,7 @@ def test_show_missing_thread_reports_a_clean_error(
         def get_state(self, config: Any) -> Any:
             return _EmptySnapshot()
 
-    monkeypatch.setattr(cli, "build_graph", lambda checkpointer: _FakeGraph())
+    monkeypatch.setattr(cli, "build_graph", lambda checkpointer, store: _FakeGraph())
     code = cli.main(["--show", "missing-thread", "--checkpointer", "memory"])
     assert code != 0
     assert "missing-thread" in capsys.readouterr().err

@@ -300,6 +300,7 @@ def _foundry_state(**overrides: Any) -> FoundryState:
         "leakage_findings": [],
         "cleaning_plan": None,
         "cv_strategy": None,
+        "approach_memo": None,
         "experiment_plan": [],
         "experiments": [],
         "leaderboard": [],

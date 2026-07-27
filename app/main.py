@@ -6,6 +6,11 @@ never per-request, matching foundry/cli.py's own `with checkpointer_cm as checkp
 Actual graph execution never runs inside a request handler: app/runs.py's RunManager does that on
 a background thread, since foundry's sandboxed experiment runners make real, possibly
 minutes-long Docker calls that must never block the event loop.
+
+M7: a `store_factory` mirrors `checkpointer_factory` exactly (Postgres default for `make api`,
+`nullcontext(InMemoryStore())` for tests/test_api.py) — the same reason foundry/cli.py opens both
+together: cross-run lessons should follow whichever backend the checkpointer uses, not be a
+separate switch to keep in sync.
 """
 
 from __future__ import annotations
@@ -18,6 +23,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.base import BaseStore
+from langgraph.store.postgres import PostgresStore
 
 from app.runs import RunManager
 from app.schemas import (
@@ -33,23 +40,31 @@ from foundry.graph import build_graph
 from foundry.stubs import install_canned_responses
 
 CheckpointerFactory = Callable[[], AbstractContextManager[BaseCheckpointSaver]]
+StoreFactory = Callable[[], AbstractContextManager[BaseStore]]
 
 
 def _default_checkpointer_factory() -> AbstractContextManager[BaseCheckpointSaver]:
     return PostgresSaver.from_conn_string(settings.database_url)
 
 
+def _default_store_factory() -> AbstractContextManager[BaseStore]:
+    return PostgresStore.from_conn_string(settings.database_url)
+
+
 def create_app(
     checkpointer_factory: CheckpointerFactory = _default_checkpointer_factory,
+    store_factory: StoreFactory = _default_store_factory,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if not settings.anthropic_api_key:
             install_canned_responses()
-        with checkpointer_factory() as checkpointer:
+        with checkpointer_factory() as checkpointer, store_factory() as store:
             if isinstance(checkpointer, PostgresSaver):
                 checkpointer.setup()
-            graph = build_graph(checkpointer)
+            if isinstance(store, PostgresStore):
+                store.setup()
+            graph = build_graph(checkpointer, store)
             app.state.run_manager = RunManager(graph)
             yield
 

@@ -156,7 +156,7 @@ def _stop(
     costs: list[CostEntry] | None = None,
     human_decisions: list[HumanDecision] | None = None,
 ) -> Command[
-    Literal["data_team", "experiment_planner", "experiment_runner", "red_team", "reporter"]
+    Literal["data_team", "modeling_team", "experiment_runner", "red_team", "reporter"]
 ]:
     update: dict[str, object] = {
         "iteration_count": iteration,
@@ -175,7 +175,7 @@ def _stop(
 def principal(
     state: FoundryState,
 ) -> Command[
-    Literal["data_team", "experiment_planner", "experiment_runner", "red_team", "reporter"]
+    Literal["data_team", "modeling_team", "experiment_runner", "red_team", "reporter"]
 ]:
     iteration = state["iteration_count"] + 1
     dataset = get_dataset(state["dataset_ref"])
@@ -280,8 +280,8 @@ def principal(
             human_decisions=human_decisions,
         )
 
-    next_goto: list[Send] | Literal["experiment_planner"] = (
-        _fanout(state, pending) if pending else "experiment_planner"
+    next_goto: list[Send] | Literal["modeling_team"] = (
+        _fanout(state, pending) if pending else "modeling_team"
     )
     update: dict[str, object] = {
         "iteration_count": iteration,

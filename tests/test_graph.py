@@ -19,6 +19,7 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
+from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
 
 from foundry.config import settings
@@ -29,10 +30,12 @@ from foundry.state import FoundryState
 from foundry.stubs import register_canned_responses
 from foundry.teams import data_team as data_team_module
 from foundry.teams import experiment_runner as runner_module
+from foundry.teams import lessons as lessons_module
 from foundry.teams import modeling_team as modeling_team_module
 from foundry.teams import principal as principal_module
 from foundry.teams import red_team as red_team_module
 from foundry.teams import reporter as reporter_module
+from foundry.tools import memory
 from foundry.tools.audit import AuditColumnStat, AuditReport
 from foundry.tools.profiler import RawColumnStats, RawProfile
 
@@ -43,6 +46,7 @@ _ALL_TEAM_MODULES = (
     runner_module,
     red_team_module,
     reporter_module,
+    lessons_module,
 )
 
 _RAW_PROFILE = RawProfile(
@@ -191,8 +195,8 @@ def test_build_graph_compiles_with_expected_nodes() -> None:
     graph = build_graph()
     nodes = set(graph.get_graph().nodes) - {"__start__", "__end__"}
     assert nodes == {
-        "principal", "data_team", "experiment_planner", "experiment_runner", "red_team",
-        "reporter", "final_gate",
+        "principal", "data_team", "modeling_team", "experiment_runner", "red_team",
+        "reporter", "final_gate", "lesson_writer",
     }
 
 
@@ -270,6 +274,82 @@ def test_send_fanout_runs_in_parallel_and_never_loses_cost(
     total_cost = round(sum(entry.usd for entry in final_state["costs"]), 8)
     assert final_state["spent_usd"] == pytest.approx(total_cost)
     assert final_state["spent_usd"] > 0
+
+
+def test_second_run_plans_differently_because_of_the_first_runs_lesson(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SPEC M7's headline requirement: "demonstrate run #2 differing because of run #1's
+    lessons." Run #1 (a fresh, empty InMemoryStore) fans out all three of the stub's default
+    families in one Send batch — _FAMILY_SEQUENCE (foundry/stubs.py) has exactly 3 entries,
+    matching settings.max_experiments_per_iteration, so no family filtering is needed to make
+    that happen. gradient_boosting is made to score highest, so
+    foundry/teams/lessons.py::lesson_writer persists it as the run's Lesson.best_model_family.
+    Run #2 shares the same store: its literature_scout recommends gradient_boosting first
+    (foundry/teams/modeling_team.py::_best_past_family, direction-aware over roc_auc), which the
+    stub's _experiment_plan then places ahead of the default escalation order — the first family
+    run #2 actually plans differs from run #1's, entirely offline, no API key involved."""
+    _use_stub_everywhere(monkeypatch)
+    monkeypatch.setattr(
+        data_team_module.profiler_tool, "profile", lambda dataset, **kw: _RAW_PROFILE
+    )
+    monkeypatch.setattr(runner_module.tracker, "log_run", lambda **kwargs: "run-id")
+    monkeypatch.setattr(
+        red_team_module.audit_tool,
+        "audit",
+        lambda dataset, cleaning_plan, **kw: _CLEAN_AUDIT_REPORT,
+    )
+
+    def _family_scored_sandbox_run(code: str, **kw: Any) -> SandboxResult:
+        if "GradientBoostingClassifier" in code:
+            auc = 0.95
+        elif "RandomForestClassifier" in code:
+            auc = 0.80
+        else:
+            auc = 0.70
+        return SandboxResult(
+            stdout=f'FOUNDRY_METRICS {{"roc_auc": {auc}}}', stderr="", exit_code=0,
+            duration_s=0.1, timed_out=False,
+        )
+
+    monkeypatch.setattr(runner_module.sandbox, "run", _family_scored_sandbox_run)
+
+    store = InMemoryStore()
+    graph = build_graph(InMemorySaver(), store)
+
+    config_1 = run_config("memory-run-1")
+    paused_1 = graph.invoke(
+        initial_state(goal="predict churn", dataset_ref="churn", budget_usd=20.0), config_1
+    )
+    final_1 = _resume_through_final_gate(graph, config_1, paused_1)
+
+    winner_1 = next(
+        spec.model_family
+        for spec in final_1["experiment_plan"]
+        if spec.experiment_id == final_1["leaderboard"][0].experiment_id
+    )
+    assert winner_1 == "gradient_boosting"
+    run_1_first_family = final_1["experiment_plan"][0].model_family
+    assert run_1_first_family == "logistic_regression"  # default order — no lesson existed yet
+    assert "## Lessons applied" not in final_1["report_md"]  # nothing recommended on run #1
+    assert "## Lessons learned" in final_1["report_md"]
+
+    lessons = memory.search("churn", store=store)
+    assert len(lessons) == 1
+    assert lessons[0].best_model_family == "gradient_boosting"
+    assert lessons[0].best_metric_name == "roc_auc"
+
+    config_2 = run_config("memory-run-2")
+    paused_2 = graph.invoke(
+        initial_state(goal="predict churn", dataset_ref="churn", budget_usd=20.0), config_2
+    )
+    final_2 = _resume_through_final_gate(graph, config_2, paused_2)
+
+    run_2_first_family = final_2["experiment_plan"][0].model_family
+    assert run_2_first_family == "gradient_boosting"
+    assert run_2_first_family != run_1_first_family
+    assert "## Lessons applied" in final_2["report_md"]
+    assert "gradient_boosting" in final_2["report_md"]
 
 
 @pytest.mark.docker

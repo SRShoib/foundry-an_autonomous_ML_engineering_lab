@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     cost_per_llm_call_usd: float = 0.01
     cost_per_sandbox_minute_usd: float = 0.002
 
+    # Cross-thread lesson memory (foundry/tools/memory.py, foundry/teams/lessons.py, M7) — how
+    # many of a dataset's most recent Lesson records the literature scout is shown per pass.
+    memory_max_lessons: int = 5
+
     # Bundled sample datasets (foundry/datasets.py, M3) and where run artifacts are written.
     data_dir: Path = Path("data/samples")
     artifacts_dir: Path = Path("artifacts")
