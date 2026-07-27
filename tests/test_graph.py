@@ -22,7 +22,9 @@ from foundry.teams import data_team as data_team_module
 from foundry.teams import experiment_runner as runner_module
 from foundry.teams import modeling_team as modeling_team_module
 from foundry.teams import principal as principal_module
+from foundry.teams import red_team as red_team_module
 from foundry.teams import reporter as reporter_module
+from foundry.tools.audit import AuditColumnStat, AuditReport
 from foundry.tools.profiler import RawColumnStats, RawProfile
 
 _ALL_TEAM_MODULES = (
@@ -30,6 +32,7 @@ _ALL_TEAM_MODULES = (
     data_team_module,
     modeling_team_module,
     runner_module,
+    red_team_module,
     reporter_module,
 )
 
@@ -60,6 +63,88 @@ _SANDBOX_SUCCESS = SandboxResult(
     timed_out=False,
 )
 
+_CLEAN_AUDIT_REPORT = AuditReport(
+    dataset_name="churn.csv",
+    n_rows=1200,
+    n_cols=2,
+    target_column="churned",
+    columns=[AuditColumnStat(name="tenure_months", is_numeric=True, target_auc=0.3)],
+    duplicate_row_count=0,
+    duplicate_row_rate=0.0,
+)
+
+# --- M5 booby-trap fixture: churn_leaky's shape, faked so this stays Docker-free -----------------
+
+_LEAKY_RAW_PROFILE = RawProfile(
+    dataset_name="churn_leaky.csv",
+    n_rows=300,
+    n_cols=4,
+    target_column="churned",
+    target_positive_rate=0.27,
+    columns=[
+        RawColumnStats(
+            name="customer_id", dtype="object", n_missing=0, pct_missing=0.0, n_unique=300,
+            is_numeric=False, sample_values=["a"],
+        ),
+        RawColumnStats(
+            name="tenure_months", dtype="int64", n_missing=0, pct_missing=0.0, n_unique=72,
+            is_numeric=True, sample_values=["1"], target_corr=-0.1, target_auc=0.4,
+        ),
+        # Categorical, so foundry/tools/profiler.py's real target_auc (numeric-only) would never
+        # measure it either — this fixture models that blind spot, it doesn't just assert it.
+        RawColumnStats(
+            name="retention_call_outcome", dtype="object", n_missing=0, pct_missing=0.0,
+            n_unique=3, is_numeric=False, sample_values=["saved"],
+        ),
+        RawColumnStats(
+            name="churned", dtype="int64", n_missing=0, pct_missing=0.0, n_unique=2,
+            is_numeric=True, sample_values=["0", "1"],
+        ),
+    ],
+)
+
+_LEAKY_AUDIT_REPORT = AuditReport(
+    dataset_name="churn_leaky.csv",
+    n_rows=300,
+    n_cols=2,
+    target_column="churned",
+    columns=[
+        AuditColumnStat(name="tenure_months", is_numeric=True, target_auc=0.4),
+        AuditColumnStat(name="retention_call_outcome", is_numeric=False, target_auc=0.9962),
+    ],
+    duplicate_row_count=0,
+    duplicate_row_rate=0.0,
+)
+
+_CLEAN_LEAKY_AUDIT_REPORT = AuditReport(
+    dataset_name="churn_leaky.csv",
+    n_rows=300,
+    n_cols=1,
+    target_column="churned",
+    columns=[AuditColumnStat(name="tenure_months", is_numeric=True, target_auc=0.4)],
+    duplicate_row_count=0,
+    duplicate_row_rate=0.0,
+)
+
+
+def _fake_leaky_audit(dataset: Any, cleaning_plan: Any, **kw: Any) -> AuditReport:
+    dropped = set(cleaning_plan.drop_columns) if cleaning_plan else set()
+    return _CLEAN_LEAKY_AUDIT_REPORT if "retention_call_outcome" in dropped else _LEAKY_AUDIT_REPORT
+
+
+def _fake_leaky_sandbox_run(code: str, **kw: Any) -> SandboxResult:
+    # CodeRequest.drop_columns is embedded via repr(list[str]) — this literal only appears in
+    # the generated code when the column is actually in drop_columns for THIS training run.
+    if "'retention_call_outcome'" in code:
+        return SandboxResult(
+            stdout='FOUNDRY_METRICS {"roc_auc": 0.80}', stderr="", exit_code=0, duration_s=0.1,
+            timed_out=False,
+        )
+    return SandboxResult(
+        stdout='FOUNDRY_METRICS {"roc_auc": 0.99}', stderr="", exit_code=0, duration_s=0.1,
+        timed_out=False,
+    )
+
 
 def _use_stub_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
     """Wraps the shared StubClient in a fresh MeteredClient per get_llm() call — mirroring
@@ -79,7 +164,8 @@ def test_build_graph_compiles_with_expected_nodes() -> None:
     graph = build_graph()
     nodes = set(graph.get_graph().nodes) - {"__start__", "__end__"}
     assert nodes == {
-        "principal", "data_team", "experiment_planner", "experiment_runner", "reporter",
+        "principal", "data_team", "experiment_planner", "experiment_runner", "red_team",
+        "reporter",
     }
 
 
@@ -122,12 +208,18 @@ def test_send_fanout_runs_in_parallel_and_never_loses_cost(
     branch's cost must survive the merge: state["spent_usd"] is derived from state["costs"] (an
     add-reducer) by principal, never written by the runners directly, which is exactly the fix
     for the lost-update race concurrent branches would otherwise hit on a plain, non-reducer
-    field. No Docker needed — sandbox.run and tracker.log_run are both faked."""
+    field. No Docker needed — sandbox.run, tracker.log_run, and (M5) the red_team audit tool are
+    all faked."""
     _use_stub_everywhere(monkeypatch)
     monkeypatch.setattr(
         data_team_module.profiler_tool, "profile", lambda dataset, **kw: _RAW_PROFILE
     )
     monkeypatch.setattr(runner_module.tracker, "log_run", lambda **kwargs: "run-id")
+    monkeypatch.setattr(
+        red_team_module.audit_tool,
+        "audit",
+        lambda dataset, cleaning_plan, **kw: _CLEAN_AUDIT_REPORT,
+    )
 
     seen_threads: set[int] = set()
 
@@ -167,6 +259,51 @@ def test_end_to_end_offline_run_with_in_memory_checkpointer(
     assert any(result.status == "success" for result in final_state["experiments"])
     assert final_state["costs"]  # M4: per-agent cost ledger populated
     assert final_state["leaderboard"]  # M4: principal maintains this every turn
+
+
+def test_booby_trap_offline_end_to_end_catches_and_remediates_the_leak(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M5's headline integration test (SPEC: "a booby-trapped leaky dataset it must catch").
+    churn_leaky's real shape (data/samples/churn_leaky.csv, data/samples/README.md) is faked here
+    at the sandbox boundary — _fake_leaky_sandbox_run/_fake_leaky_audit key off whether
+    'retention_call_outcome' is in the CURRENT cleaning_plan.drop_columns, exactly the state
+    foundry/teams/data_team.py's remediation re-run is meant to change — so this stays Docker-free
+    while still exercising the full catch-then-remediate loop: audit gate -> red_team invalidates
+    -> data_team remediates -> a clean replacement experiment reaches the leaderboard.
+    """
+    _use_stub_everywhere(monkeypatch)
+    monkeypatch.setattr(
+        data_team_module.profiler_tool, "profile", lambda dataset, **kw: _LEAKY_RAW_PROFILE
+    )
+    monkeypatch.setattr(runner_module.tracker, "log_run", lambda **kwargs: "run-id")
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_leaky_sandbox_run)
+    monkeypatch.setattr(red_team_module.audit_tool, "audit", _fake_leaky_audit)
+
+    graph = build_graph(InMemorySaver())
+    state = initial_state(goal="predict churn", dataset_ref="churn_leaky", budget_usd=20.0)
+    final_state = graph.invoke(state, run_config("booby-trap-test"))
+
+    invalidated_ids = {
+        finding.experiment_id
+        for finding in final_state["invalidations"]
+        if finding.verdict == "invalidated"
+    }
+    assert invalidated_ids  # the red team actually caught something
+
+    assert any(
+        finding.column == "retention_call_outcome" and finding.severity == "high"
+        for finding in final_state["leakage_findings"]
+    )
+    cleaning_plan = final_state["cleaning_plan"]
+    assert cleaning_plan is not None
+    assert "retention_call_outcome" in cleaning_plan.drop_columns  # remediation happened
+
+    leaderboard_ids = {entry.experiment_id for entry in final_state["leaderboard"]}
+    assert leaderboard_ids, "a clean, post-remediation experiment should have made the board"
+    assert leaderboard_ids.isdisjoint(invalidated_ids)
+
+    assert final_state["stop_reason"] is not None
 
 
 @pytest.mark.postgres

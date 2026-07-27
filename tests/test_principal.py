@@ -11,11 +11,14 @@ from langgraph.types import Command, Send
 
 from foundry.config import settings
 from foundry.models import (
+    CleaningPlan,
     CostEntry,
     DataProfile,
     ExperimentResult,
     ExperimentSpec,
+    LeakageFinding,
     PrincipalDirective,
+    RedTeamFinding,
 )
 from foundry.state import FoundryState
 from foundry.teams import principal as principal_module
@@ -60,6 +63,7 @@ def _state(**overrides: Any) -> FoundryState:
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "audited_experiments": [],
         "costs": [],
         "lessons": [],
         "report_md": None,
@@ -112,10 +116,31 @@ def test_target_met_guard_stops_before_consulting_the_llm(
         experiment_id="exp-001", status="success", metrics={"roc_auc": 0.95}, cost_usd=0.1,
         duration_s=1.0,
     )
-    state = _state(data_profile=_PROFILE, experiments=[result])
+    # Already audited and cleared — see test_audit_gate_routes_to_red_team_before_target_met for
+    # the un-audited case, which must NOT stop here.
+    state = _state(
+        data_profile=_PROFILE, experiments=[result], audited_experiments=["exp-001"]
+    )
     command = principal_module.principal(state)
     assert command.goto == "reporter"
     assert _update(command)["stop_reason"] == "target_met"
+
+
+def test_audit_gate_routes_to_red_team_before_target_met(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The milestone's core ordering guarantee: an un-audited result that WOULD satisfy
+    target_met must be routed to red_team first, never straight to reporter — otherwise a leaky
+    0.99 could end the run before anyone checked it."""
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _AssertNotCalledLLM())
+    result = ExperimentResult(
+        experiment_id="exp-001", status="success", metrics={"roc_auc": 0.99}, cost_usd=0.1,
+        duration_s=1.0,
+    )
+    state = _state(data_profile=_PROFILE, experiments=[result])
+    command = principal_module.principal(state)
+    assert command.goto == "red_team"
+    assert _update(command)["next_team"] == "red_team"
 
 
 def test_diminishing_returns_guard_on_experiment_count_cap(
@@ -129,7 +154,11 @@ def test_diminishing_returns_guard_on_experiment_count_cap(
         )
         for i in range(settings.max_experiments_total)
     ]
-    state = _state(data_profile=_PROFILE, experiments=results)
+    state = _state(
+        data_profile=_PROFILE,
+        experiments=results,
+        audited_experiments=[r.experiment_id for r in results],
+    )
     command = principal_module.principal(state)
     assert command.goto == "reporter"
     assert _update(command)["stop_reason"] == "diminishing_returns"
@@ -232,7 +261,12 @@ def test_routes_to_experiment_planner_when_plan_is_exhausted(
         experiment_id="exp-001", status="success", metrics={"roc_auc": 0.5}, cost_usd=0.1,
         duration_s=1.0,
     )
-    state = _state(data_profile=_PROFILE, experiment_plan=[spec], experiments=[result])
+    state = _state(
+        data_profile=_PROFILE,
+        experiment_plan=[spec],
+        experiments=[result],
+        audited_experiments=["exp-001"],
+    )
     command = principal_module.principal(state)
     assert command.goto == "experiment_planner"
 
@@ -263,7 +297,9 @@ def test_leaderboard_is_recomputed_every_turn_not_only_at_stop(
         experiment_id="exp-001", status="success", metrics={"roc_auc": 0.5}, cost_usd=0.1,
         duration_s=1.0,
     )
-    state = _state(data_profile=_PROFILE, experiments=[result])
+    state = _state(
+        data_profile=_PROFILE, experiments=[result], audited_experiments=["exp-001"]
+    )
     command = principal_module.principal(state)
     assert command.goto == "experiment_planner"
     board = _update(command)["leaderboard"]
@@ -275,3 +311,72 @@ def test_iteration_count_always_increments(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(principal_module, "get_llm", lambda role: _AssertNotCalledLLM())
     command = principal_module.principal(_state(iteration_count=3))
     assert _update(command)["iteration_count"] == 4
+
+
+def test_invalidated_experiment_is_excluded_from_leaderboard_and_does_not_stop_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A red-team-invalidated 0.99 must not appear on the leaderboard and must not trigger
+    target_met — foundry/leaderboard.py's invalidated_ids exclusion, exercised through
+    principal."""
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    leaky = ExperimentResult(
+        experiment_id="exp-001", status="success", metrics={"roc_auc": 0.99}, cost_usd=0.1,
+        duration_s=1.0,
+    )
+    finding = RedTeamFinding(
+        experiment_id="exp-001", category="leakage", verdict="invalidated",
+        explanation="e", recommendation="r",
+    )
+    state = _state(
+        data_profile=_PROFILE,
+        experiments=[leaky],
+        audited_experiments=["exp-001"],
+        invalidations=[finding],
+    )
+    command = principal_module.principal(state)
+    update = _update(command)
+    assert update["leaderboard"] == []
+    # No cleared candidate exists, so the run keeps looping instead of falsely stopping on the
+    # invalidated 0.99's target_met — it proceeds to plan another experiment.
+    assert command.goto == "experiment_planner"
+
+
+def test_unremediated_high_severity_leak_routes_back_to_data_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A high-severity LeakageFinding not yet in cleaning_plan.drop_columns (e.g. one the red
+    team just wrote) routes back to data_team for remediation, even though a data_profile
+    already exists."""
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _AssertNotCalledLLM())
+    state = _state(
+        data_profile=_PROFILE,
+        cleaning_plan=CleaningPlan(drop_columns=[], rationale="nothing dropped yet"),
+        leakage_findings=[
+            LeakageFinding(column="retention_call_outcome", reason="red team", severity="high")
+        ],
+    )
+    command = principal_module.principal(state)
+    assert command.goto == "data_team"
+    assert _update(command)["next_team"] == "data_team"
+
+
+def test_remediation_route_clears_once_the_column_is_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Self-terminating: once cleaning_plan.drop_columns catches up, the same high-severity
+    finding no longer routes to data_team — no separate remediation counter is needed."""
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    state = _state(
+        data_profile=_PROFILE,
+        cleaning_plan=CleaningPlan(
+            drop_columns=["retention_call_outcome"], rationale="dropped after remediation"
+        ),
+        leakage_findings=[
+            LeakageFinding(column="retention_call_outcome", reason="red team", severity="high")
+        ],
+    )
+    command = principal_module.principal(state)
+    assert command.goto != "data_team"

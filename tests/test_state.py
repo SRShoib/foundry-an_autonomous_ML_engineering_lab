@@ -7,7 +7,13 @@ from __future__ import annotations
 import operator
 from typing import get_args, get_type_hints
 
-from foundry.models import CostEntry, ExperimentResult, HumanDecision
+from foundry.models import (
+    CostEntry,
+    ExperimentResult,
+    HumanDecision,
+    LeakageFinding,
+    RedTeamFinding,
+)
 from foundry.state import FoundryState
 
 
@@ -54,6 +60,41 @@ def test_costs_field_uses_add_reducer_and_concatenates() -> None:
     assert [c.agent_role for c in merged] == ["worker", "sandbox"]
 
 
+def test_leakage_findings_field_uses_add_reducer_and_concatenates() -> None:
+    """M5: a remediation re-run's fresh findings must accumulate on top of a prior pass's,
+    not overwrite them — see foundry/teams/red_team.py's module docstring."""
+    reducer = _reducer("leakage_findings")
+    assert reducer is operator.add
+
+    left = [LeakageFinding(column="a", reason="r", severity="low")]
+    right = [LeakageFinding(column="b", reason="r", severity="high")]
+    merged = reducer(left, right)  # type: ignore[operator]
+    assert [f.column for f in merged] == ["a", "b"]
+
+
+def test_invalidations_and_audited_experiments_use_add_reducer_and_concatenate() -> None:
+    reducer = _reducer("invalidations")
+    assert reducer is operator.add
+    left = [
+        RedTeamFinding(
+            experiment_id="exp-001", category="leakage", verdict="invalidated",
+            explanation="e", recommendation="r",
+        )
+    ]
+    right = [
+        RedTeamFinding(
+            experiment_id="exp-002", category="leakage", verdict="valid",
+            explanation="e", recommendation="r",
+        )
+    ]
+    merged = reducer(left, right)  # type: ignore[operator]
+    assert [f.experiment_id for f in merged] == ["exp-001", "exp-002"]
+
+    reducer = _reducer("audited_experiments")
+    assert reducer is operator.add
+    assert reducer(["exp-001"], ["exp-002"]) == ["exp-001", "exp-002"]  # type: ignore[operator]
+
+
 def test_dataset_ref_holds_a_reference_not_raw_data() -> None:
     state: FoundryState = {
         "goal": "predict churn",
@@ -68,6 +109,7 @@ def test_dataset_ref_holds_a_reference_not_raw_data() -> None:
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "audited_experiments": [],
         "costs": [],
         "lessons": [],
         "report_md": None,

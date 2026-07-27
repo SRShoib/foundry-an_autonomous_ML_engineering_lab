@@ -12,7 +12,13 @@ from typing import Any, Literal, cast
 import pytest
 
 from foundry.leaderboard import rank_experiments
-from foundry.models import CostEntry, CVStrategy, ExperimentResult, ReportNarrative
+from foundry.models import (
+    CostEntry,
+    CVStrategy,
+    ExperimentResult,
+    RedTeamFinding,
+    ReportNarrative,
+)
 from foundry.state import FoundryState
 from foundry.teams import reporter as reporter_module
 from foundry.teams.reporter import cost_by_agent, render_model_card, render_report
@@ -34,6 +40,7 @@ def _state(**overrides: Any) -> FoundryState:
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "audited_experiments": [],
         "costs": [],
         "lessons": [],
         "report_md": None,
@@ -51,7 +58,7 @@ def _state(**overrides: Any) -> FoundryState:
 def _result(
     experiment_id: str,
     roc_auc: float,
-    status: Literal["success", "failed", "invalidated"] = "success",
+    status: Literal["success", "failed"] = "success",
 ) -> ExperimentResult:
     return ExperimentResult(
         experiment_id=experiment_id,
@@ -169,3 +176,49 @@ def test_reporter_tops_up_spent_usd_with_its_own_llm_cost(monkeypatch: pytest.Mo
     update = reporter_module.reporter(state)
     assert update["spent_usd"] == pytest.approx(0.12)
     assert "0.1200" in cast(str, update["report_md"])
+
+
+def _finding(
+    experiment_id: str, verdict: Literal["valid", "invalidated"] = "invalidated"
+) -> RedTeamFinding:
+    return RedTeamFinding(
+        experiment_id=experiment_id,
+        category="leakage",
+        verdict=verdict,
+        explanation="target-association AUC clears the threshold",
+        recommendation="drop the column and retrain",
+    )
+
+
+def test_render_report_lists_red_team_findings_when_present() -> None:
+    narrative = ReportNarrative(summary="s", recommendation="r")
+    state = _state(invalidations=[_finding("exp-001")])
+    report = render_report(state, narrative, [], spent_usd=0.0)
+    assert "## Red team findings" in report
+    assert "exp-001" in report
+    assert "invalidated" in report
+
+
+def test_render_report_omits_red_team_section_when_no_findings() -> None:
+    narrative = ReportNarrative(summary="s", recommendation="r")
+    report = render_report(_state(), narrative, [], spent_usd=0.0)
+    assert "## Red team findings" not in report
+
+
+def test_render_model_card_notes_the_winner_is_red_team_cleared() -> None:
+    results = [_result("exp-001", 0.8520)]
+    board = rank_experiments(results, "roc_auc")
+    narrative = ReportNarrative(summary="s", recommendation="promote it")
+    state = _state(experiments=results)
+
+    card = render_model_card(state, narrative, board[0])
+    assert "Red team" in card
+    assert "cleared" in card
+
+
+def test_render_model_card_distinguishes_all_invalidated_from_no_success() -> None:
+    narrative = ReportNarrative(summary="s", recommendation="investigate")
+    state = _state(invalidations=[_finding("exp-001")])
+    card = render_model_card(state, narrative, None)
+    assert "invalidated" in card
+    assert "No successful experiment produced a model." not in card
