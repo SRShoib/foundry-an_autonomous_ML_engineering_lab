@@ -13,6 +13,17 @@ scored back against the same rows) — deliberately the same naive, whole-datase
 training pipeline would produce if it fit its encoder before splitting, so the audit's AUC picks
 up exactly the leak a naive pipeline would exploit.
 
+M8: target association generalizes to every task type by binarizing the target before measuring
+it, rather than gating the whole measurement on "target has exactly 2 unique values" (which made
+this entire tool a silent no-op on M8's regression task — every target_auc would have stayed None
+forever). A target that is already binary is used as-is (byte-identical AUCs on churn/churn_leaky
+to every number data/samples/README.md already documents — verified by test, not assumed); any
+other numeric target (a continuous regression target, or a numeric-coded multiclass label) is
+split at its own median first, then scored with the exact same numeric/categorical AUC machinery
+below. A non-numeric multiclass target has no well-defined median split, so every column's
+target_auc stays None in that case, same as before this change. `audit_leak_auc_threshold`
+therefore keeps one meaning across every task type instead of two.
+
 `duplicate_row_count`/`duplicate_row_rate` measure a second, independent failure mode: exact
 duplicate feature+target rows, the signature of a join/export bug that lets the same record land
 in both the train and test fold of an ungrouped CV split (SPEC's "train/test contamination" /
@@ -73,10 +84,22 @@ drop_cols = $drop_columns
 df = df.drop(columns=[c for c in drop_cols if c in df.columns and c != target])
 
 n_rows, n_cols = df.shape
-y = df[target]
+y_raw = df[target]
 
 duplicate_row_count = int(df.duplicated().sum())
 duplicate_row_rate = float(duplicate_row_count / n_rows) if n_rows else 0.0
+
+# Generalizes across every task type: a binary target is used as-is (byte-identical to the old
+# behavior); any other numeric target (a continuous regression target, or a numeric-coded
+# multiclass label) is binarized at its own median first, so the same leak floor applies
+# uniformly. A non-numeric multiclass target has no well-defined median split, so y_bin stays
+# None and every column's target_auc below stays None too, same as before this change.
+y_bin = None
+if pd.api.types.is_numeric_dtype(y_raw):
+    if y_raw.dropna().nunique() == 2:
+        y_bin = y_raw
+    elif y_raw.dropna().nunique() > 2:
+        y_bin = (y_raw > y_raw.median()).astype(int)
 
 columns = []
 for col in df.columns:
@@ -85,22 +108,24 @@ for col in df.columns:
     series = df[col]
     is_numeric = bool(pd.api.types.is_numeric_dtype(series))
     target_auc = None
-    mask = series.notna() & y.notna()
-    if mask.sum() > 1 and y[mask].nunique() == 2:
-        try:
-            if is_numeric:
-                if series[mask].nunique() > 1:
-                    target_auc = float(roc_auc_score(y[mask], series[mask]))
-            else:
-                # In-sample target encoding: replace each category with its own mean target
-                # rate, then score the encoding against the same rows. Deliberately naive (the
-                # same whole-dataset fit/transform a buggy pipeline would do before splitting) so
-                # this AUC surfaces exactly the leak such a pipeline would exploit.
-                category_means = y[mask].groupby(series[mask]).transform("mean")
-                if category_means.nunique() > 1:
-                    target_auc = float(roc_auc_score(y[mask], category_means))
-        except ValueError:
-            target_auc = None
+    if y_bin is not None:
+        mask = series.notna() & y_bin.notna()
+        if mask.sum() > 1:
+            try:
+                if is_numeric:
+                    if series[mask].nunique() > 1:
+                        target_auc = float(roc_auc_score(y_bin[mask], series[mask]))
+                else:
+                    # In-sample target encoding: replace each category with its own mean target
+                    # rate, then score the encoding against the same rows. Deliberately naive
+                    # (the same whole-dataset fit/transform a buggy pipeline would do before
+                    # splitting) so this AUC surfaces exactly the leak such a pipeline would
+                    # exploit.
+                    category_means = y_bin[mask].groupby(series[mask]).transform("mean")
+                    if category_means.nunique() > 1:
+                        target_auc = float(roc_auc_score(y_bin[mask], category_means))
+            except ValueError:
+                target_auc = None
 
     columns.append({
         "name": col,

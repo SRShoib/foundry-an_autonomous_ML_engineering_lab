@@ -296,6 +296,50 @@ def test_training_code_uses_pipeline_for_non_first_batch_slots_even_on_attempt_z
     assert "OneHotEncoder" in result.code
 
 
+def _regression_code_request(*, attempt: int, prior_experiments: int = 0) -> CodeRequest:
+    return CodeRequest(
+        experiment_id="exp-001",
+        model_family="logistic_regression",
+        hyperparams={},
+        dataset_path="/data/energy.csv",
+        target_column="monthly_kwh",
+        task_type="regression",
+        primary_metric="rmse",
+        drop_columns=["building_id"],
+        numeric_impute="median",
+        categorical_impute="most_frequent",
+        cv_kind="kfold",
+        cv_n_splits=5,
+        random_seed=42,
+        metrics_sentinel="FOUNDRY_METRICS",
+        attempt=attempt,
+        prior_experiments=prior_experiments,
+        batch_index=0,
+        previous_error=None,
+    )
+
+
+def test_training_code_regression_uses_kfold_rmse_never_predict_proba() -> None:
+    """M8: foundry/datasets.py's `energy` task is the first regression dataset this repo ships —
+    the pipeline branch must never emit StratifiedKFold/predict_proba (binary-classification-only)
+    against a continuous target."""
+    request = _regression_code_request(attempt=1)
+    result = _client().structured(with_context("write code", request), TrainingCode)
+    ast.parse(result.code)
+    assert "KFold" in result.code
+    assert "StratifiedKFold" not in result.code
+    assert "root_mean_squared_error" in result.code
+    assert "predict_proba" not in result.code
+    assert "Ridge" in result.code  # the logistic_regression family's regression counterpart
+
+
+def test_training_code_regression_naive_attempt_is_still_syntactically_valid() -> None:
+    request = _regression_code_request(attempt=0)
+    result = _client().structured(with_context("write code", request), TrainingCode)
+    ast.parse(result.code)
+    assert "OneHotEncoder" not in result.code
+
+
 def _supervisor_context(**overrides: Any) -> SupervisorContext:
     base = SupervisorContext(
         goal="predict churn",
@@ -335,6 +379,38 @@ def test_principal_directive_stops_with_target_met() -> None:
     result = _client().structured(with_context("decide", ctx), PrincipalDirective)
     assert result.should_continue is False
     assert result.stop_reason == "target_met"
+
+
+def test_principal_directive_target_met_is_direction_aware_for_rmse() -> None:
+    """M8: leaderboard.target_met is lower-is-better for rmse — a bare `>=` here would fire
+    target_met backwards on foundry/datasets.py's regression task (foundry/stubs.py's
+    _principal_directive bug this test guards against). 60 <= 65 -> target genuinely met."""
+    ctx = _supervisor_context(
+        iteration=2,
+        n_experiments_total=1,
+        n_experiments_successful=1,
+        best_metric_so_far=60.0,
+        primary_metric="rmse",
+        target_value=65.0,
+    )
+    result = _client().structured(with_context("decide", ctx), PrincipalDirective)
+    assert result.should_continue is False
+    assert result.stop_reason == "target_met"
+
+
+def test_principal_directive_worse_rmse_does_not_fire_target_met() -> None:
+    """80 > 65 -- a worse (higher) rmse than target must NOT be read as target_met, the exact
+    backwards-direction bug a bare `best_metric_so_far >= target_value` comparison would produce."""
+    ctx = _supervisor_context(
+        iteration=1,
+        n_experiments_total=1,
+        n_experiments_successful=1,
+        best_metric_so_far=80.0,
+        primary_metric="rmse",
+        target_value=65.0,
+    )
+    result = _client().structured(with_context("decide", ctx), PrincipalDirective)
+    assert result.stop_reason != "target_met"
 
 
 def _red_team_context(**overrides: Any) -> RedTeamContext:
@@ -379,6 +455,19 @@ def test_red_team_verdict_invalidates_on_an_implausible_metric() -> None:
 
 def test_red_team_verdict_stays_valid_on_clean_evidence() -> None:
     result = _client().structured(with_context("audit", _red_team_context()), RedTeamVerdict)
+    assert result.verdict == "valid"
+
+
+def test_red_team_verdict_does_not_invalidate_a_large_unbounded_rmse() -> None:
+    """M8: rmse has no natural upper bound (foundry/teams/red_team.py's _BOUNDED_UNIT_METRICS
+    excludes it) -- a bare `primary_metric_value >= audit_suspicious_metric_ceiling` (0.999) would
+    have invalidated every regression experiment as validation_overfitting, since any real rmse
+    trivially clears 0.999. This is foundry/stubs.py's own bug this test guards against; the real
+    code floor in foundry/teams/red_team.py::_apply_floor already had the guard."""
+    ctx = _red_team_context(
+        primary_metric="rmse", primary_metric_value=95.0, metrics={"rmse": 95.0}
+    )
+    result = _client().structured(with_context("audit", ctx), RedTeamVerdict)
     assert result.verdict == "valid"
 
 

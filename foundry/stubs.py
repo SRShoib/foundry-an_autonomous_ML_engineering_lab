@@ -23,6 +23,7 @@ from __future__ import annotations
 from string import Template
 from typing import Literal, cast
 
+from foundry import leaderboard
 from foundry.config import settings
 from foundry.llm import StubClient, get_stub_client
 from foundry.models import (
@@ -46,7 +47,7 @@ from foundry.teams.experiment_runner import SUPPORTED_MODEL_FAMILIES, CodeReques
 from foundry.teams.lessons import LessonContext
 from foundry.teams.modeling_team import PlanContext, ScoutContext
 from foundry.teams.principal import SupervisorContext
-from foundry.teams.red_team import RedTeamContext
+from foundry.teams.red_team import RedTeamContext, _metric_implausible
 from foundry.teams.reporter import ReportContext
 from foundry.tools.profiler import RawProfile
 
@@ -187,7 +188,7 @@ def _experiment_plan(prompt: str) -> ExperimentPlan:
 
 # (import line, constructor expression) — the expression may itself reference $random_seed,
 # which is filled in by the same Template.substitute() call as the rest of the code body.
-_ESTIMATORS: dict[str, tuple[str, str]] = {
+_CLASSIFIER_ESTIMATORS: dict[str, tuple[str, str]] = {
     "logistic_regression": (
         "from sklearn.linear_model import LogisticRegression",
         "LogisticRegression(max_iter=1000, random_state=$random_seed)",
@@ -206,18 +207,74 @@ _ESTIMATORS: dict[str, tuple[str, str]] = {
     ),
 }
 
+# M8: task_type="regression"'s counterpart table (foundry/datasets.py's `energy` dataset).
+# model_family still names a FAMILY, not a concrete sklearn class — "logistic_regression" denotes
+# "the linear baseline" in both tables (Ridge here, LogisticRegression above), the same convention
+# foundry/teams/experiment_runner.py's `_family_description` documents for the real LLM path.
+_REGRESSOR_ESTIMATORS: dict[str, tuple[str, str]] = {
+    "logistic_regression": (
+        "from sklearn.linear_model import Ridge",
+        "Ridge(random_state=$random_seed)",
+    ),
+    "random_forest": (
+        "from sklearn.ensemble import RandomForestRegressor",
+        "RandomForestRegressor(random_state=$random_seed, n_jobs=1)",
+    ),
+    "gradient_boosting": (
+        "from sklearn.ensemble import GradientBoostingRegressor",
+        "GradientBoostingRegressor(random_state=$random_seed)",
+    ),
+    "mlp": (
+        "from sklearn.neural_network import MLPRegressor",
+        "MLPRegressor(max_iter=500, random_state=$random_seed)",
+    ),
+}
+
+
+def _estimator_for(model_family: str, task_type: str) -> tuple[str, str]:
+    table = _REGRESSOR_ESTIMATORS if task_type == "regression" else _CLASSIFIER_ESTIMATORS
+    return table[model_family]
+
+
+def _cv_and_score_lines(task_type: str) -> tuple[str, str, str, str, str]:
+    """(cv_import, metric_import, cv_ctor, predict_line, score_line) — regression uses plain
+    KFold + root_mean_squared_error over cross_val_predict's default `method="predict"`;
+    classification keeps M3's StratifiedKFold + roc_auc_score over predict_proba's positive
+    column. cv_ctor/score_line still reference $cv_n_splits/$random_seed — substituted by the
+    same outer Template.substitute() call that fills in the rest of the code body, exactly like
+    _ESTIMATORS' ctor_expr strings already do."""
+    if task_type == "regression":
+        return (
+            "from sklearn.model_selection import KFold, cross_val_predict",
+            "from sklearn.metrics import root_mean_squared_error",
+            "KFold(n_splits=$cv_n_splits, shuffle=True, random_state=$random_seed)",
+            "pred = cross_val_predict(model, X, y, cv=cv)",
+            "score = root_mean_squared_error(y, pred)",
+        )
+    return (
+        "from sklearn.model_selection import StratifiedKFold, cross_val_predict",
+        "from sklearn.metrics import roc_auc_score",
+        "StratifiedKFold(n_splits=$cv_n_splits, shuffle=True, random_state=$random_seed)",
+        'pred = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]',
+        "score = roc_auc_score(y, pred)",
+    )
+
 
 def _naive_code(request: CodeRequest) -> str:
     """Deliberately buggy: no imputation, no categorical encoding. Fails with
     `ValueError: could not convert string to float` the moment sklearn tries to coerce the
-    raw DataFrame (still containing string columns) to a numeric array."""
-    import_line, ctor_expr = _ESTIMATORS[request.model_family]
+    raw DataFrame (still containing string columns) to a numeric array — true regardless of
+    task_type, since the bug is in the missing preprocessing, not the estimator or the CV kind."""
+    import_line, ctor_expr = _estimator_for(request.model_family, request.task_type)
+    cv_import, metric_import, cv_ctor, predict_line, score_line = _cv_and_score_lines(
+        request.task_type
+    )
     body = f"""\
 import json
 import joblib
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
-from sklearn.metrics import roc_auc_score
+{cv_import}
+{metric_import}
 {import_line}
 
 df = pd.read_csv("$dataset_path")
@@ -227,13 +284,13 @@ X = df.drop(columns=["$target_column"])
 y = df["$target_column"]
 
 model = {ctor_expr}
-cv = StratifiedKFold(n_splits=$cv_n_splits, shuffle=True, random_state=$random_seed)
-proba = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]
-auc = roc_auc_score(y, proba)
+cv = {cv_ctor}
+{predict_line}
+{score_line}
 
 model.fit(X, y)
 joblib.dump(model, "model.pkl")
-print("$sentinel " + json.dumps({{"$primary_metric": auc}}))
+print("$sentinel " + json.dumps({{"$primary_metric": score}}))
 """
     return Template(body).substitute(
         dataset_path=request.dataset_path,
@@ -247,10 +304,14 @@ print("$sentinel " + json.dumps({{"$primary_metric": auc}}))
 
 
 def _pipeline_code(request: CodeRequest) -> str:
-    """The corrected version: impute + encode via a ColumnTransformer, then cross-validate.
-    Scoped to binary classification with stratified k-fold — M3 ships exactly one bundled
-    dataset; a regression/kfold variant is future work when M8 adds more tasks."""
-    import_line, ctor_expr = _ESTIMATORS[request.model_family]
+    """The corrected version: impute + encode via a ColumnTransformer, then cross-validate. The
+    ColumnTransformer itself is already task-type-agnostic (M3); M8 adds a regression/KFold/rmse
+    branch alongside the existing classification/StratifiedKFold/roc_auc one, selected the same
+    way _naive_code selects it — request.task_type, already a CodeRequest field since M3."""
+    import_line, ctor_expr = _estimator_for(request.model_family, request.task_type)
+    cv_import, metric_import, cv_ctor, predict_line, score_line = _cv_and_score_lines(
+        request.task_type
+    )
     body = f"""\
 import json
 import joblib
@@ -259,8 +320,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
-from sklearn.metrics import roc_auc_score
+{cv_import}
+{metric_import}
 {import_line}
 
 df = pd.read_csv("$dataset_path")
@@ -284,13 +345,13 @@ pre = ColumnTransformer([
 ])
 
 model = Pipeline([("pre", pre), ("clf", {ctor_expr})])
-cv = StratifiedKFold(n_splits=$cv_n_splits, shuffle=True, random_state=$random_seed)
-proba = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]
-auc = roc_auc_score(y, proba)
+cv = {cv_ctor}
+{predict_line}
+{score_line}
 
 model.fit(X, y)
 joblib.dump(model, "model.pkl")
-print("$sentinel " + json.dumps({{"$primary_metric": auc}}))
+print("$sentinel " + json.dumps({{"$primary_metric": score}}))
 """
     return Template(body).substitute(
         dataset_path=request.dataset_path,
@@ -334,9 +395,12 @@ def _training_code(prompt: str) -> TrainingCode:
 
 def _principal_directive(prompt: str) -> PrincipalDirective:
     context = read_context(prompt, SupervisorContext)
-    if (
-        context.best_metric_so_far is not None
-        and context.best_metric_so_far >= context.target_value
+    # M8: leaderboard.target_met is direction-aware (rmse is lower-is-better) — a bare `>=` here
+    # would fire target_met backwards on foundry/datasets.py's regression task. The real code
+    # guard in foundry/teams/principal.py already used target_met correctly; only this stub had
+    # the bug, and it was never exercised until a non-roc_auc task existed.
+    if context.best_metric_so_far is not None and leaderboard.target_met(
+        context.best_metric_so_far, context.target_value, context.primary_metric
     ):
         return PrincipalDirective(
             should_continue=False, stop_reason="target_met", rationale="Target metric reached."
@@ -390,7 +454,13 @@ def _red_team_verdict(prompt: str) -> RedTeamVerdict:
             ),
             recommendation="Deduplicate the dataset or switch to a grouped CV strategy.",
         )
-    if context.primary_metric_value >= settings.audit_suspicious_metric_ceiling:
+    # M8: reuses red_team._metric_implausible's _BOUNDED_UNIT_METRICS guard instead of a bare
+    # `>=` — rmse has no natural upper bound, so a bare comparison against
+    # audit_suspicious_metric_ceiling (0.999) would invalidate every regression experiment as
+    # validation_overfitting. The real code floor in foundry/teams/red_team.py::_apply_floor
+    # already had this guard; only this stub was missing it, and it was never exercised until a
+    # non-bounded-metric task existed.
+    if _metric_implausible(context.primary_metric, context.primary_metric_value):
         return RedTeamVerdict(
             verdict="invalidated",
             category="validation_overfitting",
