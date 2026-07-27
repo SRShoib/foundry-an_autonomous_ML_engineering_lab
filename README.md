@@ -6,7 +6,7 @@ trained model, an experiment report, and a model card. See [SPEC.md](SPEC.md) fo
 architecture and milestone plan; see [CLAUDE.md](CLAUDE.md) for project conventions and
 guardrails.
 
-This repo is built one milestone at a time. **Status: M5 (red team) complete.**
+This repo is built one milestone at a time. **Status: M6 (control) complete.**
 
 ## Requirements
 
@@ -31,10 +31,18 @@ make test                    # pytest — unit tests always run; @pytest.mark.do
                               # if the corresponding service is available, and skip
                               # automatically if not
 
-make run TASK=churn          # runs the graph end-to-end on the bundled churn dataset;
-                              # writes artifacts/<thread_id>/{report.md,model_card.md}
+make run TASK=churn          # runs the graph end-to-end on the bundled churn dataset; prompts
+                              # on stdin at each interrupt() gate (y/N); writes
+                              # artifacts/<thread_id>/{report.md,model_card.md} once signed off
+make run TASK=churn --auto-approve   # same, but answers every gate with approve non-
+                              # interactively — still a real interrupt/resume round trip, just
+                              # unattended (CI/demos)
 make run TASK=churn_leaky    # M5 fixture: a real leak the data team's own scan can't see —
                               # watch the report show the red team catch and remediate it
+
+make api                     # FastAPI control plane on :8000 — POST /runs, GET /runs/{id},
+                              # GET /runs/{id}/events (SSE activity feed), GET /approvals,
+                              # POST /runs/{id}/resume; needs `make up` first (Postgres)
 
 make down                    # stop postgres + mlflow
 ```
@@ -135,3 +143,47 @@ MLflow UI: http://localhost:5000
   remediation pass's own fresh re-profiling can't rediscover a categorical leak) makes the
   condition false on the next turn. No remediation counter needed beyond the pre-existing
   `principal_max_iterations` — the loop is self-terminating by construction.
+- **Both M6 gates are placed so a pause never re-bills an LLM call on resume**: LangGraph 1.2.9
+  re-executes a node's entire body from the top when it resumes past an `interrupt()` (verified
+  against the installed source, not memory) — the interrupted attempt commits nothing, so
+  whatever ran before the `interrupt()` call runs again for free, and whatever runs after it runs
+  exactly once. The budget gate therefore sits inside `foundry/teams/principal.py`, after every
+  code guard but strictly *before* `get_llm("principal")`; the final gate is its own node,
+  `foundry/gates.py::final_gate`, placed *after* `reporter` (whose LLM call already happened)
+  rather than folded into it. Both call through `foundry/gates.py::ask`, the one place a raw
+  `Command(resume=...)` value is validated into a `HumanResponse` before anything trusts it.
+- **The budget gate's cost projection is code-owned, the LLM may only raise it**: trusting an
+  LLM-authored `ExperimentSpec.est_cost_usd` alone to decide whether a human gets asked would let
+  a model talk its way past oversight, the same failure mode `foundry/teams/red_team.py`'s
+  `_apply_floor` already refuses. `foundry/tools/cost.py::project_run_usd` takes
+  `max(mean cost of completed experiments, est_cost_usd)` — a low-balled estimate can never beat
+  what experiments have actually cost so far.
+- **The budget gate asks at most once per run**: once a `HumanDecision(gate="budget")` exists in
+  `state["human_decisions"]`, `foundry/gates.py::budget_approval_request` stops firing — the
+  still-unappealable code cap (`spent_usd >= budget_usd`, checked before any LLM call) keeps
+  stopping the run regardless, so the gate's job is flagging the *first* crossing into expensive
+  territory, not re-litigating an already-answered question every subsequent principal turn.
+- **A denied gate stops the run rather than looping back for another attempt**: a denied budget
+  gate routes straight to `reporter` with a new `stop_reason="human_declined"` (so a report is
+  still produced); a denied final gate has `final_gate` append a `## Sign-off` section marking
+  the report DECLINED. Neither needs a new retry counter — SPEC's stop conditions gained one more
+  member instead of gaining a loop.
+- **The CLI answers gates, it never skips them**: `foundry/cli.py` prompts on stdin by default
+  and resumes through the real `interrupt()`; `--auto-approve` answers approve non-interactively
+  for CI/demos, still through the same real interrupt/resume round trip — never by working around
+  the gate. With no human to answer (stdin isn't a TTY and `--auto-approve` wasn't passed), the
+  CLI reports the thread id and leaves the run paused at its durable checkpoint rather than
+  inventing an answer, exactly SPEC's "expensive runs pause for approval and resume via the API".
+- **`app/main.py::create_app` takes a checkpointer-context-manager factory**: Postgres for
+  `make api`, `nullcontext(InMemorySaver())` for tests — mirroring `foundry/cli.py`'s own
+  `--checkpointer` switch — so `tests/test_api.py` exercises the real FastAPI + background-thread
+  + interrupt/resume path without a live database.
+- **Graph execution never runs inside a FastAPI request handler**: `app/runs.py::RunManager`
+  drives `graph.stream(...)` on a background thread per run, since a sandboxed experiment runner
+  is a real, possibly minutes-long Docker call that must never block the event loop. Status
+  (`running` / `awaiting_approval` / `completed` / `failed`) is derived from
+  `graph.get_state(config)` — `.interrupts` and `.next` are the checkpointer's own source of
+  truth — rather than tracked as a second, driftable copy; `RunManager` itself contributes only
+  whether the current leg's background thread is still alive (a brand-new thread_id's empty
+  snapshot must read as "running", never as a false "completed", until that leg actually
+  finishes — caught by `tests/test_api.py`'s full round-trip test, not by inspection).

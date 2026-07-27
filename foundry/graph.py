@@ -1,9 +1,9 @@
 """Graph assembly (SPEC M3: "V1 graph... Postgres checkpointing on"). Every team node routes
 via Command(goto=...) — including back to `principal` — so the only STATIC edges this graph
-needs are START -> principal, reporter -> END, and (M4) experiment_runner -> principal;
-everything else is dynamic routing, validated at compile time by each node's
-Command[Literal[...]] return annotation (verified against the installed LangGraph 1.2.9 source:
-a typo'd goto target raises at .compile(), it is not a silent failure).
+needs are START -> principal, reporter -> final_gate -> END (M6), and (M4)
+experiment_runner -> principal; everything else is dynamic routing, validated at compile time by
+each node's Command[Literal[...]] return annotation (verified against the installed LangGraph
+1.2.9 source: a typo'd goto target raises at .compile(), it is not a silent failure).
 
 experiment_runner gets the one static edge because M4 reaches it only via Send fan-out from
 foundry/teams/principal.py — a node reached solely by Send has no incoming edge to declare, but
@@ -32,6 +32,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from foundry.config import settings
+from foundry.gates import final_gate
 from foundry.state import FoundryState
 from foundry.teams.data_team import data_team_node
 from foundry.teams.experiment_runner import experiment_runner
@@ -52,6 +53,7 @@ ALLOWED_MSGPACK_MODULES: tuple[tuple[str, str], ...] = (
     ("foundry.models", "LeaderboardEntry"),
     ("foundry.models", "CostEntry"),
     ("foundry.models", "RedTeamFinding"),
+    ("foundry.models", "HumanDecision"),
 )
 
 
@@ -74,10 +76,16 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
     builder.add_node("experiment_runner", experiment_runner)  # pyright: ignore[reportArgumentType]
     builder.add_node("red_team", red_team_node)
     builder.add_node("reporter", reporter)
+    # M6: a real interrupt() gate between reporter and END (SPEC: "sign-off on the winning model
+    # + report before finalize") — a plain add_edge here, mirroring reporter's own "a single,
+    # static destination" wiring, since final_gate always goes to END regardless of the human's
+    # decision (see foundry/gates.py's module docstring for why the decline case doesn't loop).
+    builder.add_node("final_gate", final_gate)
 
     builder.add_edge(START, "principal")
     builder.add_edge("experiment_runner", "principal")
-    builder.add_edge("reporter", END)
+    builder.add_edge("reporter", "final_gate")
+    builder.add_edge("final_gate", END)
 
     return builder.compile(checkpointer=checkpointer)
 

@@ -29,7 +29,14 @@ from foundry.models import (
 )
 
 TeamName = Literal["principal", "data_team", "modeling_team", "red_team", "reporter"]
-StopReason = Literal["target_met", "budget_exhausted", "diminishing_returns", "max_iterations"]
+# M6: "human_declined" is a real stop reason (a human denied the budget gate) but is deliberately
+# NOT added to PrincipalDirective.stop_reason's Literal in foundry/models.py — only
+# foundry/teams/principal.py's code guard may ever produce it, the same "a model can never pick a
+# stop reason it isn't allowed to reason about" invariant applied to budget_exhausted/
+# max_iterations.
+StopReason = Literal[
+    "target_met", "budget_exhausted", "diminishing_returns", "max_iterations", "human_declined"
+]
 
 
 class FoundryState(TypedDict):

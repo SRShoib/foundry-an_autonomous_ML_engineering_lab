@@ -5,6 +5,15 @@ ANTHROPIC_API_KEY is set (mirroring foundry/llm.py::get_llm's own switch, done o
 than inside get_llm to keep fixtures out of the library's hot path — see foundry/stubs.py), runs
 the graph to completion, and writes the report/model card to
 settings.artifacts_dir/<thread_id>/.
+
+M6: the graph now has two real interrupt() gates (foundry/gates.py) — the CLI answers them, it
+never skips them. By default it prompts on stdin (the interrupt genuinely fires, checkpoints, and
+records a HumanDecision either way); `--auto-approve` answers every gate with approve
+non-interactively, for CI/demos, still through the same real interrupt/resume round trip. If
+stdin isn't a TTY and --auto-approve wasn't passed, the run is left paused at a durable
+checkpoint — SPEC's "expensive runs pause for approval and resume via the API" is exactly this
+case, so the CLI reports the thread id and how to resume it via app/main.py rather than guessing
+an answer.
 """
 
 from __future__ import annotations
@@ -14,10 +23,11 @@ import sys
 import uuid
 from collections.abc import Sequence
 from contextlib import nullcontext
-from typing import cast
+from typing import Any, cast
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.types import Command
 
 from foundry.config import settings
 from foundry.datasets import REGISTRY, get_dataset
@@ -48,7 +58,48 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="THREAD_ID",
         help="print the persisted report for this thread instead of running",
     )
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="answer every approval gate with approve, non-interactively (CI/demos)",
+    )
     return parser
+
+
+def _format_approval_request(payload: dict[str, Any]) -> str:
+    lines = [f"=== APPROVAL REQUIRED: {payload.get('gate')} ===", str(payload.get("reason", ""))]
+    lines.append(
+        f"Spent: ${payload.get('spent_usd', 0.0):.2f} / ${payload.get('budget_usd', 0.0):.2f} "
+        "budget"
+    )
+    if payload.get("gate") == "final":
+        if payload.get("best_experiment_id"):
+            lines.append(
+                f"Winning: {payload['best_experiment_id']}  "
+                f"{payload.get('best_metric_name')} {payload.get('best_metric_value'):.4f}"
+            )
+        else:
+            lines.append("Winning: none (no cleared experiment survived)")
+        lines.append(f"Red team invalidated: {payload.get('n_invalidated', 0)}")
+    return "\n".join(lines)
+
+
+def _decide(payload: dict[str, Any], *, auto_approve: bool) -> dict[str, Any] | None:
+    """None means "leave it paused" — either --auto-approve wasn't passed and stdin isn't a TTY
+    to prompt on, or the prompt hit EOF. Never invents an answer; the checkpoint stays resumable
+    via the API either way (SPEC: "expensive runs pause for approval and resume via the API")."""
+    print()
+    print(_format_approval_request(payload))
+    if auto_approve:
+        print("--auto-approve: approving")
+        return {"approved": True, "note": "auto-approved via --auto-approve"}
+    if not sys.stdin.isatty():
+        return None
+    try:
+        answer = input("Approve? [y/N]: ").strip().lower()
+    except EOFError:
+        return None
+    return {"approved": answer == "y", "note": ""}
 
 
 def _write_artifacts(thread_id: str, state: FoundryState) -> None:
@@ -99,8 +150,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         thread_id = args.thread_id or str(uuid.uuid4())
 
         state = initial_state(goal=goal, dataset_ref=args.task, budget_usd=args.budget)
-        final_state = cast(FoundryState, graph.invoke(state, run_config(thread_id)))
+        graph_input: FoundryState | Command = state
+        config = run_config(thread_id)
 
+        while True:
+            result = cast("dict[str, Any]", graph.invoke(graph_input, config))
+            interrupts = result.get("__interrupt__")
+            if not interrupts:
+                break
+            decision = _decide(interrupts[0].value, auto_approve=args.auto_approve)
+            if decision is None:
+                print()
+                print(f"thread_id: {thread_id}")
+                print(f"PAUSED at gate: {interrupts[0].value.get('gate')}")
+                print("Resume via the API, e.g.:")
+                print(f'  POST /runs/{thread_id}/resume {{"approved": true}}')
+                return 2
+            graph_input = Command(resume=decision)
+
+        final_state = cast(FoundryState, result)
         _write_artifacts(thread_id, final_state)
         print(f"thread_id: {thread_id}")
         print(f"stop_reason: {final_state['stop_reason']}")

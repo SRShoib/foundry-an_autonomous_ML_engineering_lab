@@ -42,7 +42,17 @@ runners"): once experiment_planner has appended a batch of pending specs, princi
 of them in one Command(goto=[Send(...), ...]) rather than routing to a single experiment_runner
 — verified against the installed LangGraph 1.2.9 source that this collapses back into exactly
 one principal execution once every branch's update has merged, so iteration_count still has
-exactly one writer per round-trip."""
+exactly one writer per round-trip.
+
+M6 adds the budget gate (SPEC: "any single run projected > $X or total spend > 80% of budget
+pauses for approval") right here, after every code guard above but before get_llm("principal") is
+ever called: everything above this point (dataset lookup, leaderboard ranking, the guard checks)
+is a pure read of state, so replaying it when foundry/gates.ask()'s interrupt() resumes the node
+from the top is free — the LLM directive call happens exactly once, never re-billed across a
+pause/resume round trip. foundry/gates.py's budget_approval_request fires at most once per run
+(see its docstring); a denial routes to _stop with the new "human_declined" StopReason rather than
+looping, an approval falls through to the ordinary directive flow with the decision folded into
+whichever update this turn eventually returns."""
 
 from __future__ import annotations
 
@@ -51,7 +61,7 @@ from typing import Literal
 from langgraph.types import Command, Send
 from pydantic import BaseModel
 
-from foundry import leaderboard
+from foundry import gates, leaderboard
 from foundry.config import settings
 from foundry.datasets import get_dataset
 from foundry.llm import get_llm
@@ -59,6 +69,7 @@ from foundry.models import (
     CostEntry,
     ExperimentResult,
     ExperimentSpec,
+    HumanDecision,
     LeaderboardEntry,
     PrincipalDirective,
 )
@@ -143,6 +154,7 @@ def _stop(
     spent_usd: float,
     leaderboard_entries: list[LeaderboardEntry],
     costs: list[CostEntry] | None = None,
+    human_decisions: list[HumanDecision] | None = None,
 ) -> Command[
     Literal["data_team", "experiment_planner", "experiment_runner", "red_team", "reporter"]
 ]:
@@ -155,6 +167,8 @@ def _stop(
     }
     if costs:
         update["costs"] = costs
+    if human_decisions:
+        update["human_decisions"] = human_decisions
     return Command(goto="reporter", update=update)
 
 
@@ -218,6 +232,23 @@ def principal(
             iteration, "diminishing_returns", spent_usd=spent_usd, leaderboard_entries=board
         )
 
+    pending = _pending_specs(state)
+    human_decisions: list[HumanDecision] = []
+    approval_request = gates.budget_approval_request(state, pending, spent_usd)
+    if approval_request is not None:
+        response = gates.ask(approval_request)
+        human_decisions.append(
+            HumanDecision(gate="budget", approved=response.approved, note=response.note)
+        )
+        if not response.approved:
+            return _stop(
+                iteration,
+                "human_declined",
+                spent_usd=spent_usd,
+                leaderboard_entries=board,
+                human_decisions=human_decisions,
+            )
+
     llm = get_llm("principal")
     context = SupervisorContext(
         goal=state["goal"],
@@ -246,19 +277,19 @@ def principal(
             spent_usd=spent_usd,
             leaderboard_entries=board,
             costs=llm.costs,
+            human_decisions=human_decisions,
         )
 
-    pending = _pending_specs(state)
     next_goto: list[Send] | Literal["experiment_planner"] = (
         _fanout(state, pending) if pending else "experiment_planner"
     )
-    return Command(
-        goto=next_goto,
-        update={
-            "iteration_count": iteration,
-            "next_team": "modeling_team",
-            "spent_usd": spent_usd,
-            "leaderboard": board,
-            "costs": llm.costs,
-        },
-    )
+    update: dict[str, object] = {
+        "iteration_count": iteration,
+        "next_team": "modeling_team",
+        "spent_usd": spent_usd,
+        "leaderboard": board,
+        "costs": llm.costs,
+    }
+    if human_decisions:
+        update["human_decisions"] = human_decisions
+    return Command(goto=next_goto, update=update)

@@ -12,6 +12,8 @@ dependencies = [
   "mlflow>=3.14,<4",
   "pydantic>=2.13,<3",
   "pydantic-settings>=2.14,<3",
+  "fastapi>=0.140,<1",
+  "uvicorn[standard]>=0.51,<1",
 ]
 
 [dependency-groups]
@@ -21,6 +23,7 @@ dev = [
   "pytest>=9.1",
   "pandas>=2.3,<3",
   "numpy>=2,<3",
+  "httpx>=0.28,<1",
 ]
 
 [tool.ruff]
@@ -32,7 +35,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pyright]
 pythonVersion = "3.11"
-include = ["foundry", "scripts", "tests"]
+include = ["foundry", "app", "scripts", "tests"]
 typeCheckingMode = "basic"
 
 [tool.pytest.ini_options]
