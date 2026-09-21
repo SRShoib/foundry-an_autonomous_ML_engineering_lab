@@ -6,7 +6,7 @@ trained model, an experiment report, and a model card. See [SPEC.md](SPEC.md) fo
 architecture and milestone plan; see [CLAUDE.md](CLAUDE.md) for project conventions and
 guardrails.
 
-This repo is built one milestone at a time. **Status: M3 (V1 graph) complete.**
+This repo is built one milestone at a time. **Status: M4 (scale-out) complete.**
 
 ## Requirements
 
@@ -26,9 +26,10 @@ make smoke                   # proves the guardrails: sandbox isolation, checkpo
 
 make lint                    # ruff
 make typecheck                # pyright
-make test                    # pytest — unit tests always run; @pytest.mark.docker and
-                              # @pytest.mark.postgres tests run too if the corresponding
-                              # service is available, and skip automatically if not
+make test                    # pytest — unit tests always run; @pytest.mark.docker,
+                              # @pytest.mark.postgres, and @pytest.mark.mlflow tests run too
+                              # if the corresponding service is available, and skip
+                              # automatically if not
 
 make run TASK=churn          # runs the V1 graph end-to-end on the bundled churn dataset;
                               # writes artifacts/<thread_id>/{report.md,model_card.md}
@@ -70,3 +71,33 @@ MLflow UI: http://localhost:5000
   caps are checked before the LLM is ever consulted, and `PrincipalDirective`'s `stop_reason`
   type deliberately excludes `budget_exhausted`/`max_iterations` — a model can never talk its
   way past a cap it isn't allowed to reason about.
+- **Send fan-out, not a modeling_team subgraph**: M4 parallelizes experiments by having
+  `foundry/teams/principal.py` return `Command(goto=[Send("experiment_runner", ...), ...])` for
+  every pending `ExperimentSpec` in the current planning batch, rather than restructuring
+  `modeling_team` into a subgraph — principal is already the graph's single routing authority,
+  so it is also the natural place to decide how many experiments run in parallel.
+  `experiment_runner` reads a small `RunnerInput` payload (LangGraph's map-reduce pattern), not
+  the full state, and there is no more "no pending spec" case to guard against: Send always
+  names exactly the one spec each branch runs.
+- **spent_usd is derived, never incrementally written, under parallelism**: Send-fanned-out
+  `experiment_runner` branches genuinely execute on separate threads (verified against
+  LangGraph 1.2.9's `BackgroundExecutor`), so each one appends its own `CostEntry` items to
+  `state["costs"]` (an add-reducer — safe under concurrent writes) instead of writing
+  `spent_usd` directly, which would race and silently lose cost. `principal` is the sole writer
+  of `spent_usd`, recomputing it from `state["costs"]` every turn; `reporter` tops it up exactly
+  once more after the loop ends, folding in its own not-yet-merged LLM cost, which is safe
+  because reporter always runs alone.
+- **Per-agent cost is priced by real token usage, not a flat rate**: `foundry/llm.py`'s
+  `MeteredClient` reads `AIMessage.usage_metadata` off the real Anthropic response and prices it
+  against `foundry/tools/cost.py`'s per-model $/token table, so the model split (cheap
+  `worker`/haiku vs. strong `principal`/`red_team`/opus) actually shows up as different costs in
+  the report's cost-by-agent breakdown — a single flat per-call rate couldn't demonstrate the
+  split doing anything. `StubClient` calls (no API key) are priced at the old flat rate, since
+  there's no real token usage to read.
+- **MLflow logging is host-side and best-effort**: `foundry/tools/tracker.py` logs each
+  experiment via `MlflowClient`'s explicit `create_run`/`log_*`/`set_terminated` calls, never
+  the fluent `mlflow.start_run()` API, because that relies on one global "active run" that
+  concurrent Send branches would race on. Logging happens strictly after `sandbox.run` returns
+  — CLAUDE.md's sandbox guardrail runs training code with no network, so nothing inside the
+  container could reach a tracking server anyway — and a tracking failure is caught and
+  recorded as an error, never allowed to fail an otherwise-successful experiment.

@@ -12,28 +12,64 @@ This is still reason → act → observe: the LLM's `reasoning` field carries th
 sandbox.run is the Act, and the traceback fed into the next prompt is the Observation. The
 self-debug bound is a literal `for attempt in range(settings.self_debug_max_attempts)`, so
 SPEC's "max k=3" is counted, not an emergent property of a recursion_limit.
-"""
+
+M4: reached via Send fan-out from foundry/teams/principal.py, one Send per pending ExperimentSpec
+in the current planning batch (SPEC's "Send fan-out of experiment runners") — so this node reads
+a small RunnerInput payload, not the full FoundryState; there is no "pending spec" lookup to do,
+Send always names the one spec this branch runs. Multiple branches execute on separate threads
+within one superstep (verified against LangGraph 1.2.9's BackgroundExecutor), so this function
+must never mutate shared state — its only communication with the rest of the graph is the plain
+dict it returns, merged back via FoundryState's add-reducer channels (experiments, costs) through
+a static `experiment_runner -> principal` edge (foundry/graph.py), the same pattern
+foundry/teams/reporter.py uses for its own single, static destination. spent_usd is deliberately
+NOT set here: with N concurrent branches all reading the same base state["spent_usd"], the last
+write would silently discard the others' cost — foundry/teams/principal.py is the sole writer,
+deriving it as sum(costs) once the whole batch's costs have merged in.
+
+MLflow logging (foundry/tools/tracker.py) happens here, host-side, strictly after sandbox.run
+returns — CLAUDE.md's sandbox guardrail runs training code with no network, so nothing inside the
+container could reach a tracking server even if it tried. A tracker failure never fails an
+otherwise-successful experiment (see tracker.py's docstring)."""
 
 from __future__ import annotations
 
 import time
-from typing import Literal
+from typing import Literal, TypedDict
 
-from langgraph.types import Command
 from pydantic import BaseModel
 
 from foundry.config import settings
 from foundry.datasets import get_dataset
 from foundry.llm import get_llm
-from foundry.models import ExperimentResult, ExperimentSpec, SandboxLimits, TrainingCode
+from foundry.models import (
+    CleaningPlan,
+    CostEntry,
+    CVStrategy,
+    ExperimentResult,
+    ExperimentSpec,
+    SandboxLimits,
+    TrainingCode,
+)
 from foundry.prompting import with_context
-from foundry.state import FoundryState
-from foundry.tools import sandbox
+from foundry.tools import sandbox, tracker
+from foundry.tools.cost import sandbox_cost_usd
 from foundry.tools.metrics import METRICS_SENTINEL, MetricsParseError, parse_metrics
 
 SUPPORTED_MODEL_FAMILIES = frozenset(
     {"logistic_regression", "random_forest", "gradient_boosting", "mlp"}
 )  # xgboost/lightgbm are valid ExperimentSpec values but not installed in docker/sandbox/Dockerfile
+
+
+class RunnerInput(TypedDict):
+    """The Send payload foundry/teams/principal.py fans out — one per pending ExperimentSpec in
+    the current planning batch, not the full FoundryState (LangGraph's map-reduce pattern)."""
+
+    spec: ExperimentSpec
+    dataset_ref: str
+    cleaning_plan: CleaningPlan | None
+    cv_strategy: CVStrategy | None
+    prior_experiments: int
+    batch_index: int
 
 
 class CodeRequest(BaseModel):
@@ -53,6 +89,7 @@ class CodeRequest(BaseModel):
     metrics_sentinel: str
     attempt: int
     prior_experiments: int
+    batch_index: int
     previous_error: str | None = None
 
 
@@ -76,33 +113,11 @@ def build_code_prompt(request: CodeRequest) -> str:
     return with_context(instructions, request)
 
 
-def _pending_spec(state: FoundryState) -> ExperimentSpec | None:
-    done_ids = {result.experiment_id for result in state["experiments"]}
-    for spec in state["experiment_plan"]:
-        if spec.experiment_id not in done_ids:
-            return spec
-    return None
-
-
-def _estimate_cost(*, attempts: int, duration_s: float) -> float:
-    return round(
-        attempts * settings.cost_per_llm_call_usd
-        + (duration_s / 60.0) * settings.cost_per_sandbox_minute_usd,
-        6,
-    )
-
-
-def experiment_runner(state: FoundryState) -> Command[Literal["principal"]]:
-    spec = _pending_spec(state)
-    if spec is None:
-        return Command(
-            goto="principal",
-            update={"errors": ["experiment_runner: no pending experiment spec"]},
-        )
-
-    dataset = get_dataset(state["dataset_ref"])
-    cleaning_plan = state["cleaning_plan"]
-    cv_strategy = state["cv_strategy"]
+def experiment_runner(payload: RunnerInput) -> dict[str, object]:
+    spec = payload["spec"]
+    dataset = get_dataset(payload["dataset_ref"])
+    cleaning_plan = payload["cleaning_plan"]
+    cv_strategy = payload["cv_strategy"]
     llm = get_llm("worker")
     limits = SandboxLimits(timeout_seconds=settings.experiment_timeout_seconds)
 
@@ -122,7 +137,8 @@ def experiment_runner(state: FoundryState) -> Command[Literal["principal"]]:
         random_seed=settings.random_seed,
         metrics_sentinel=METRICS_SENTINEL,
         attempt=0,
-        prior_experiments=len(state["experiments"]),
+        prior_experiments=payload["prior_experiments"],
+        batch_index=payload["batch_index"],
         previous_error=None,
     )
 
@@ -130,6 +146,7 @@ def experiment_runner(state: FoundryState) -> Command[Literal["principal"]]:
     last_error = ""
     attempts_used = 0
     result_metrics: dict[str, float] | None = None
+    artifacts: dict[str, bytes] = {}
 
     for attempt in range(settings.self_debug_max_attempts):
         request = request.model_copy(
@@ -138,6 +155,7 @@ def experiment_runner(state: FoundryState) -> Command[Literal["principal"]]:
         code = llm.structured(build_code_prompt(request), TrainingCode)
         sandbox_result = sandbox.run(code.code, data_dir=dataset.path.parent, limits=limits)
         attempts_used = attempt + 1
+        artifacts = sandbox_result.artifacts
 
         if sandbox_result.exit_code != 0:
             tail = sandbox_result.stderr or sandbox_result.stdout
@@ -153,11 +171,37 @@ def experiment_runner(state: FoundryState) -> Command[Literal["principal"]]:
         break
 
     duration_s = time.monotonic() - start
-    cost_usd = _estimate_cost(attempts=attempts_used, duration_s=duration_s)
+    status: Literal["success", "failed"] = "success" if result_metrics is not None else "failed"
+
+    costs: list[CostEntry] = [*llm.costs]
+    costs.append(
+        CostEntry(
+            agent_role="sandbox",
+            model="sandbox",
+            kind="sandbox",
+            usd=sandbox_cost_usd(duration_s),
+        )
+    )
+    cost_usd = round(sum(entry.usd for entry in costs), 8)
+
+    run_id = tracker.log_run(
+        spec=spec,
+        dataset_ref=payload["dataset_ref"],
+        metrics=result_metrics or {},
+        params={"cv_kind": request.cv_kind, "cv_n_splits": str(request.cv_n_splits)},
+        artifacts=artifacts,
+        status=status,
+        duration_s=duration_s,
+    )
+
+    errors: list[str] = []
+    if run_id is None:
+        errors.append(f"experiment_runner: mlflow logging failed for {spec.experiment_id}")
 
     if result_metrics is not None:
         experiment_result = ExperimentResult(
             experiment_id=spec.experiment_id,
+            mlflow_run_id=run_id,
             status="success",
             metrics=result_metrics,
             cost_usd=cost_usd,
@@ -167,6 +211,7 @@ def experiment_runner(state: FoundryState) -> Command[Literal["principal"]]:
     else:
         experiment_result = ExperimentResult(
             experiment_id=spec.experiment_id,
+            mlflow_run_id=run_id,
             status="failed",
             metrics={},
             cost_usd=cost_usd,
@@ -175,10 +220,7 @@ def experiment_runner(state: FoundryState) -> Command[Literal["principal"]]:
             error=last_error,
         )
 
-    return Command(
-        goto="principal",
-        update={
-            "experiments": [experiment_result],
-            "spent_usd": state["spent_usd"] + cost_usd,
-        },
-    )
+    update: dict[str, object] = {"experiments": [experiment_result], "costs": costs}
+    if errors:
+        update["errors"] = errors
+    return update

@@ -23,6 +23,7 @@ from foundry.llm import get_llm
 from foundry.models import (
     CleaningPlan,
     ColumnProfile,
+    CostEntry,
     CVStrategy,
     DataProfile,
     LeakageFinding,
@@ -43,6 +44,7 @@ DATA_TEAM_OUTPUT_KEYS: tuple[str, ...] = (
     "cleaning_plan",
     "cv_strategy",
     "errors",
+    "costs",
 )
 
 
@@ -54,6 +56,7 @@ class DataTeamState(TypedDict):
     cleaning_plan: CleaningPlan | None
     cv_strategy: CVStrategy | None
     errors: Annotated[list[str], operator.add]
+    costs: Annotated[list[CostEntry], operator.add]
 
 
 def profiler(state: DataTeamState) -> dict[str, object]:
@@ -103,7 +106,11 @@ def profiler(state: DataTeamState) -> dict[str, object]:
         columns=columns,
         notes=assessment.notes,
     )
-    return {"data_profile": data_profile, "leakage_findings": leak_report.findings}
+    return {
+        "data_profile": data_profile,
+        "leakage_findings": leak_report.findings,
+        "costs": llm.costs,
+    }
 
 
 def cleaner(state: DataTeamState) -> dict[str, object]:
@@ -130,7 +137,7 @@ def cleaner(state: DataTeamState) -> dict[str, object]:
     drop |= {f.column for f in state["leakage_findings"] if f.severity == "high"}
 
     plan = plan.model_copy(update={"drop_columns": sorted(drop)})
-    return {"cleaning_plan": plan}
+    return {"cleaning_plan": plan, "costs": llm.costs}
 
 
 def splitter(state: DataTeamState) -> dict[str, object]:
@@ -156,7 +163,7 @@ def splitter(state: DataTeamState) -> dict[str, object]:
         kind = "stratified_kfold"
 
     strategy = strategy.model_copy(update={"kind": kind, "n_splits": n_splits})
-    return {"cv_strategy": strategy}
+    return {"cv_strategy": strategy, "costs": llm.costs}
 
 
 @lru_cache(maxsize=1)
@@ -182,6 +189,7 @@ def data_team_node(state: FoundryState) -> Command[Literal["principal"]]:
         "cv_strategy": None,
         "errors": [],  # deliberately empty, not state["errors"] — both schemas use
         # operator.add, so seeding the parent's list here would duplicate every prior error
+        "costs": [],  # same reasoning as errors above
     }
     result = build_data_team().invoke(sub_input)
     update = {key: result[key] for key in DATA_TEAM_OUTPUT_KEYS}

@@ -4,13 +4,19 @@ short-circuit without ever consulting a model."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
-from langgraph.types import Command
+from langgraph.types import Command, Send
 
 from foundry.config import settings
-from foundry.models import DataProfile, ExperimentResult, ExperimentSpec, PrincipalDirective
+from foundry.models import (
+    CostEntry,
+    DataProfile,
+    ExperimentResult,
+    ExperimentSpec,
+    PrincipalDirective,
+)
 from foundry.state import FoundryState
 from foundry.teams import principal as principal_module
 
@@ -20,6 +26,8 @@ _PROFILE = DataProfile(
 
 
 class _AssertNotCalledLLM:
+    costs: list[CostEntry] = []
+
     def structured(self, prompt: str, schema: type, *, system: str | None = None) -> Any:
         raise AssertionError("LLM should not be consulted once a code guard has fired")
 
@@ -27,6 +35,7 @@ class _AssertNotCalledLLM:
 class _FixedDirectiveLLM:
     def __init__(self, directive: PrincipalDirective) -> None:
         self._directive = directive
+        self.costs: list[CostEntry] = []
 
     def structured(self, prompt: str, schema: type, *, system: str | None = None) -> Any:
         return self._directive
@@ -51,6 +60,7 @@ def _state(**overrides: Any) -> FoundryState:
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "costs": [],
         "lessons": [],
         "report_md": None,
         "model_card_md": None,
@@ -85,7 +95,10 @@ def test_budget_exhausted_guard_stops_without_consulting_the_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(principal_module, "get_llm", lambda role: _AssertNotCalledLLM())
-    state = _state(data_profile=_PROFILE, spent_usd=25.0, budget_usd=20.0)
+    # spent_usd is derived from costs (see foundry/teams/principal.py), never trusted directly —
+    # the stale spent_usd=0.0 below must be ignored in favor of summing costs to 25.0.
+    costs = [CostEntry(agent_role="worker", model="m", kind="sandbox", usd=25.0)]
+    state = _state(data_profile=_PROFILE, spent_usd=0.0, budget_usd=20.0, costs=costs)
     command = principal_module.principal(state)
     assert command.goto == "reporter"
     assert _update(command)["stop_reason"] == "budget_exhausted"
@@ -134,7 +147,7 @@ def test_llm_directive_can_stop_the_loop_before_any_code_cap_is_hit(
     assert _update(command)["stop_reason"] == "diminishing_returns"
 
 
-def test_routes_to_experiment_runner_when_a_spec_is_pending(
+def test_routes_to_experiment_runner_via_send_when_a_spec_is_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directive = PrincipalDirective(should_continue=True, rationale="keep going")
@@ -145,8 +158,65 @@ def test_routes_to_experiment_runner_when_a_spec_is_pending(
     )
     state = _state(data_profile=_PROFILE, experiment_plan=[spec])
     command = principal_module.principal(state)
-    assert command.goto == "experiment_runner"
+    assert isinstance(command.goto, list)
+    assert len(command.goto) == 1
+    assert isinstance(command.goto[0], Send)
+    assert command.goto[0].node == "experiment_runner"
+    assert command.goto[0].arg["spec"] == spec
+    assert command.goto[0].arg["batch_index"] == 0
     assert _update(command)["next_team"] == "modeling_team"
+
+
+def test_fans_out_one_send_per_pending_spec(monkeypatch: pytest.MonkeyPatch) -> None:
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    specs = [
+        ExperimentSpec(
+            experiment_id=f"exp-{i:03d}", model_family="logistic_regression", hyperparams={},
+            rationale="r", est_cost_usd=0.01,
+        )
+        for i in range(3)
+    ]
+    state = _state(data_profile=_PROFILE, experiment_plan=specs)
+    command = principal_module.principal(state)
+    assert isinstance(command.goto, list)
+    assert len(command.goto) == 3
+    assert all(isinstance(send, Send) for send in command.goto)
+    sends = cast("list[Send]", command.goto)
+    assert all(send.node == "experiment_runner" for send in sends)
+    assert [send.arg["spec"].experiment_id for send in sends] == [
+        "exp-000", "exp-001", "exp-002",
+    ]
+    assert [send.arg["batch_index"] for send in sends] == [0, 1, 2]
+
+
+def test_send_payload_carries_cleaning_plan_and_cv_strategy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from foundry.models import CleaningPlan, CVStrategy
+
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    spec = ExperimentSpec(
+        experiment_id="exp-001", model_family="logistic_regression", hyperparams={},
+        rationale="r", est_cost_usd=0.01,
+    )
+    cleaning_plan = CleaningPlan(drop_columns=["customer_id"], rationale="r")
+    cv_strategy = CVStrategy(kind="stratified_kfold", n_splits=5, rationale="r")
+    state = _state(
+        data_profile=_PROFILE,
+        experiment_plan=[spec],
+        cleaning_plan=cleaning_plan,
+        cv_strategy=cv_strategy,
+    )
+    command = principal_module.principal(state)
+    assert isinstance(command.goto, list)
+    assert isinstance(command.goto[0], Send)
+    payload = cast("Send", command.goto[0]).arg
+    assert payload["cleaning_plan"] == cleaning_plan
+    assert payload["cv_strategy"] == cv_strategy
+    assert payload["dataset_ref"] == "churn"
+    assert payload["prior_experiments"] == 0
 
 
 def test_routes_to_experiment_planner_when_plan_is_exhausted(
@@ -165,6 +235,40 @@ def test_routes_to_experiment_planner_when_plan_is_exhausted(
     state = _state(data_profile=_PROFILE, experiment_plan=[spec], experiments=[result])
     command = principal_module.principal(state)
     assert command.goto == "experiment_planner"
+
+
+def test_spent_usd_is_derived_from_costs_not_stale_state_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test for the lost-update race M4's Send fan-out would otherwise introduce:
+    parallel experiment_runner branches never write state["spent_usd"] directly (see
+    foundry/teams/experiment_runner.py) — principal is the sole writer, deriving it fresh from
+    state["costs"] (an add-reducer, safe under concurrency) every turn."""
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _AssertNotCalledLLM())
+    costs = [CostEntry(agent_role="worker", model="m", kind="sandbox", usd=25.0)]
+    state = _state(data_profile=_PROFILE, spent_usd=0.0, budget_usd=20.0, costs=costs)
+    command = principal_module.principal(state)
+    assert command.goto == "reporter"
+    update = _update(command)
+    assert update["stop_reason"] == "budget_exhausted"
+    assert update["spent_usd"] == pytest.approx(25.0)
+
+
+def test_leaderboard_is_recomputed_every_turn_not_only_at_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    result = ExperimentResult(
+        experiment_id="exp-001", status="success", metrics={"roc_auc": 0.5}, cost_usd=0.1,
+        duration_s=1.0,
+    )
+    state = _state(data_profile=_PROFILE, experiments=[result])
+    command = principal_module.principal(state)
+    assert command.goto == "experiment_planner"
+    board = _update(command)["leaderboard"]
+    assert len(board) == 1
+    assert board[0].experiment_id == "exp-001"
 
 
 def test_iteration_count_always_increments(monkeypatch: pytest.MonkeyPatch) -> None:
