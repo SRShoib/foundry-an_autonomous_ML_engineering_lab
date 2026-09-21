@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     cost_cap_usd_total: float = 20.0
     cost_cap_usd_per_run: float = 2.0
 
+    # Budget gate (foundry/teams/principal.py, foundry/gates.py, M6) — SPEC: "any single run
+    # projected > $X or total spend > 80% of budget pauses for approval". est_cost_usd_per_
+    # experiment is the code-owned cost floor foundry/tools/cost.py's project_run_usd() falls
+    # back to before any experiment has completed (an LLM-authored ExperimentSpec.est_cost_usd is
+    # never trusted alone to decide whether to pause a human — CLAUDE.md's "code owns the floor"
+    # asymmetry, same as foundry/teams/red_team.py's _apply_floor).
+    budget_gate_fraction: float = 0.8
+    est_cost_usd_per_experiment: float = 0.25
+
     # Model split — cheap workers/runners, strong principal + red team (SPEC)
     principal_model: str = "claude-opus-5"
     red_team_model: str = "claude-opus-5"
@@ -89,6 +98,11 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data/samples")
     artifacts_dir: Path = Path("artifacts")
     random_seed: int = 42
+
+    # FastAPI control plane (app/main.py, M6) — SPEC: "FastAPI (start run, stream events, list
+    # pending approvals, resume)".
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
 
 
 settings = Settings()

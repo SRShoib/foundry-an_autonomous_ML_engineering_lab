@@ -11,11 +11,14 @@ from langgraph.types import Command, Send
 
 from foundry.config import settings
 from foundry.models import (
+    ApprovalRequest,
     CleaningPlan,
     CostEntry,
     DataProfile,
     ExperimentResult,
     ExperimentSpec,
+    HumanDecision,
+    HumanResponse,
     LeakageFinding,
     PrincipalDirective,
     RedTeamFinding,
@@ -42,6 +45,21 @@ class _FixedDirectiveLLM:
 
     def structured(self, prompt: str, schema: type, *, system: str | None = None) -> Any:
         return self._directive
+
+
+class _RecordingAsk:
+    """Stands in for foundry.gates.ask (M6) — principal() must never call the real interrupt()
+    directly in a unit test (there is no Pregel task context to raise into), so every budget-gate
+    test replaces foundry.teams.principal's `gates` module attribute the same way existing tests
+    replace `get_llm`."""
+
+    def __init__(self, response: HumanResponse) -> None:
+        self.response = response
+        self.requests: list[ApprovalRequest] = []
+
+    def __call__(self, request: ApprovalRequest) -> HumanResponse:
+        self.requests.append(request)
+        return self.response
 
 
 def _update(command: Command[Any]) -> dict[str, Any]:
@@ -360,6 +378,102 @@ def test_unremediated_high_severity_leak_routes_back_to_data_team(
     command = principal_module.principal(state)
     assert command.goto == "data_team"
     assert _update(command)["next_team"] == "data_team"
+
+
+def test_budget_gate_fires_on_total_spend_threshold_and_records_the_decision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    recorder = _RecordingAsk(HumanResponse(approved=True, note="looks fine"))
+    monkeypatch.setattr(principal_module.gates, "ask", recorder)
+
+    spec = ExperimentSpec(
+        experiment_id="exp-001", model_family="logistic_regression", hyperparams={},
+        rationale="r", est_cost_usd=1.0,
+    )
+    # spent (15.5) + projected (1.0) = 16.5, just over 80% of the 20.0 budget (16.0) — and 1.0
+    # alone stays well under settings.cost_cap_usd_per_run, isolating the threshold condition.
+    costs = [CostEntry(agent_role="worker", model="m", kind="sandbox", usd=15.5)]
+    state = _state(data_profile=_PROFILE, experiment_plan=[spec], costs=costs, budget_usd=20.0)
+
+    command = principal_module.principal(state)
+
+    assert len(recorder.requests) == 1
+    assert recorder.requests[0].gate == "budget"
+    assert "80%" in recorder.requests[0].reason
+    update = _update(command)
+    assert [d.gate for d in update["human_decisions"]] == ["budget"]
+    assert update["human_decisions"][0].approved is True
+    assert isinstance(command.goto, list)  # approval falls through to the ordinary fan-out
+
+
+def test_budget_gate_fires_on_single_run_cost_projection_above_the_per_run_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    recorder = _RecordingAsk(HumanResponse(approved=True))
+    monkeypatch.setattr(principal_module.gates, "ask", recorder)
+
+    spec = ExperimentSpec(
+        experiment_id="exp-001", model_family="gradient_boosting", hyperparams={},
+        rationale="r", est_cost_usd=5.0,  # above settings.cost_cap_usd_per_run (2.0)
+    )
+    # spent (1.0) is nowhere near 80% of the 20.0 budget — isolates the per-run-cap condition.
+    costs = [CostEntry(agent_role="worker", model="m", kind="sandbox", usd=1.0)]
+    state = _state(data_profile=_PROFILE, experiment_plan=[spec], costs=costs, budget_usd=20.0)
+
+    command = principal_module.principal(state)
+
+    assert len(recorder.requests) == 1
+    assert "per-run cap" in recorder.requests[0].reason
+    assert isinstance(command.goto, list)
+
+
+def test_budget_gate_denial_stops_with_human_declined_without_consulting_the_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _AssertNotCalledLLM())
+    recorder = _RecordingAsk(HumanResponse(approved=False, note="too expensive"))
+    monkeypatch.setattr(principal_module.gates, "ask", recorder)
+
+    spec = ExperimentSpec(
+        experiment_id="exp-001", model_family="logistic_regression", hyperparams={},
+        rationale="r", est_cost_usd=5.0,
+    )
+    state = _state(data_profile=_PROFILE, experiment_plan=[spec], budget_usd=20.0)
+
+    command = principal_module.principal(state)
+
+    assert command.goto == "reporter"
+    update = _update(command)
+    assert update["stop_reason"] == "human_declined"
+    assert update["human_decisions"][0].approved is False
+    assert update["human_decisions"][0].note == "too expensive"
+
+
+def test_budget_gate_does_not_ask_twice_in_the_same_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    directive = PrincipalDirective(should_continue=True, rationale="keep going")
+    monkeypatch.setattr(principal_module, "get_llm", lambda role: _FixedDirectiveLLM(directive))
+    recorder = _RecordingAsk(HumanResponse(approved=True))
+    monkeypatch.setattr(principal_module.gates, "ask", recorder)
+
+    spec = ExperimentSpec(
+        experiment_id="exp-001", model_family="logistic_regression", hyperparams={},
+        rationale="r", est_cost_usd=5.0,  # would trigger the per-run cap on its own
+    )
+    state = _state(
+        data_profile=_PROFILE,
+        experiment_plan=[spec],
+        budget_usd=20.0,
+        human_decisions=[HumanDecision(gate="budget", approved=True, note="already asked")],
+    )
+
+    command = principal_module.principal(state)
+
+    assert recorder.requests == []  # never asked again this run
+    assert isinstance(command.goto, list)  # proceeded straight to fan-out
 
 
 def test_remediation_route_clears_once_the_column_is_dropped(

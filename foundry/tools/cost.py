@@ -60,3 +60,18 @@ def total_usd(entries: Sequence[CostEntry]) -> float:
     must fold in its own not-yet-merged llm.costs, since it runs strictly after principal's
     last turn and nothing re-checks the budget after it)."""
     return round(sum(entry.usd for entry in entries), 8)
+
+
+def project_run_usd(est_cost_usd: float, completed_costs: Sequence[float]) -> float:
+    """The budget gate's (foundry/teams/principal.py, M6) projection for one pending
+    ExperimentSpec: max(code floor, the LLM's own est_cost_usd). The floor is the mean cost of
+    experiments actually completed so far, or settings.est_cost_usd_per_experiment before any
+    have — an LLM-authored estimate is allowed to raise how much oversight a human gets, never to
+    talk it down, the same asymmetry foundry/teams/red_team.py's `_apply_floor` applies to
+    verdicts and PrincipalDirective.stop_reason's Literal applies to stop conditions."""
+    floor = (
+        sum(completed_costs) / len(completed_costs)
+        if completed_costs
+        else settings.est_cost_usd_per_experiment
+    )
+    return round(max(floor, est_cost_usd), 8)
