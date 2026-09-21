@@ -10,12 +10,14 @@ from typing import Any
 
 from foundry.llm import StubClient
 from foundry.models import (
+    ApproachMemo,
     CleaningPlan,
     ColumnProfile,
     CVStrategy,
     DataProfile,
     ExperimentPlan,
     LeakageReport,
+    LessonDraft,
     PrincipalDirective,
     ProfileAssessment,
     RedTeamVerdict,
@@ -25,7 +27,8 @@ from foundry.models import (
 from foundry.prompting import with_context
 from foundry.stubs import register_canned_responses
 from foundry.teams.experiment_runner import CodeRequest
-from foundry.teams.modeling_team import PlanContext
+from foundry.teams.lessons import LessonContext
+from foundry.teams.modeling_team import PlanContext, ScoutContext
 from foundry.teams.principal import SupervisorContext
 from foundry.teams.red_team import RedTeamContext
 from foundry.teams.reporter import ReportContext
@@ -110,11 +113,13 @@ def test_registry_covers_exactly_the_expected_schemas() -> None:
         LeakageReport,
         CleaningPlan,
         CVStrategy,
+        ApproachMemo,
         ExperimentPlan,
         TrainingCode,
         PrincipalDirective,
         RedTeamVerdict,
         ReportNarrative,
+        LessonDraft,
     }
     assert set(client._registry) == expected
 
@@ -184,6 +189,53 @@ def test_experiment_plan_proposes_one_distinct_family_per_batch_slot() -> None:
     plan = client.structured(with_context("plan", _plan_context()), ExperimentPlan)
     assert len(plan.specs) == settings.max_experiments_per_iteration
     assert len({spec.model_family for spec in plan.specs}) == len(plan.specs)
+
+
+def test_experiment_plan_prioritizes_the_recommended_family_ahead_of_the_default_order() -> None:
+    """M7: this is what makes SPEC's "run #2 differs because of run #1's lessons" observable
+    with no API key — recommended_families (foundry/teams/modeling_team.py's ApproachMemo) jumps
+    the queue ahead of stubs.py's own default _FAMILY_SEQUENCE."""
+    client = _client()
+    ctx = _plan_context(recommended_families=["gradient_boosting"])
+    plan = client.structured(with_context("plan", ctx), ExperimentPlan)
+    assert plan.specs[0].model_family == "gradient_boosting"
+
+
+def test_experiment_plan_never_proposes_an_avoided_family() -> None:
+    client = _client()
+    ctx = _plan_context(avoid_families=["logistic_regression"])
+    plan = client.structured(with_context("plan", ctx), ExperimentPlan)
+    assert all(spec.model_family != "logistic_regression" for spec in plan.specs)
+
+
+def _scout_context(**overrides: Any) -> ScoutContext:
+    base = ScoutContext(
+        goal="predict churn",
+        task_type="binary_classification",
+        dataset_description="a dataset",
+        prior_model_families=[],
+    )
+    return base.model_copy(update=overrides)
+
+
+def test_approach_memo_recommends_nothing_with_no_prior_lessons() -> None:
+    result = _client().structured(with_context("scout", _scout_context()), ApproachMemo)
+    assert result.recommended_families == []
+
+
+def test_approach_memo_recommends_the_past_best_family() -> None:
+    context = _scout_context(past_best_family="gradient_boosting", past_lessons=["x"])
+    result = _client().structured(with_context("scout", context), ApproachMemo)
+    assert result.recommended_families == ["gradient_boosting"]
+
+
+def test_approach_memo_does_not_recommend_an_already_tried_family() -> None:
+    context = _scout_context(
+        past_best_family="logistic_regression",
+        prior_model_families=["logistic_regression"],
+    )
+    result = _client().structured(with_context("scout", context), ApproachMemo)
+    assert result.recommended_families == []
 
 
 def _code_request(*, attempt: int, prior_experiments: int, batch_index: int = 0) -> CodeRequest:
@@ -348,3 +400,29 @@ def test_report_narrative_summarizes_the_run() -> None:
     )
     result = _client().structured(with_context("summarize", context), ReportNarrative)
     assert "churn" in result.summary
+
+
+def _lesson_context(**overrides: Any) -> LessonContext:
+    base = LessonContext(
+        goal="predict churn",
+        task_type="binary_classification",
+        stop_reason="target_met",
+        n_experiments=3,
+        n_successful=2,
+        n_invalidated=0,
+        primary_metric="roc_auc",
+        best_metric_value=0.93,
+        signed_off=True,
+    )
+    return base.model_copy(update=overrides)
+
+
+def test_lesson_draft_mentions_the_metric_when_something_succeeded() -> None:
+    result = _client().structured(with_context("lesson", _lesson_context()), LessonDraft)
+    assert "0.9300" in result.text
+
+
+def test_lesson_draft_flags_no_successful_experiment() -> None:
+    context = _lesson_context(best_metric_value=None, n_successful=0)
+    result = _client().structured(with_context("lesson", context), LessonDraft)
+    assert "No experiment succeeded" in result.text

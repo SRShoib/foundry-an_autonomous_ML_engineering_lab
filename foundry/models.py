@@ -89,6 +89,36 @@ class ExperimentPlan(BaseModel):
     specs: list[ExperimentSpec] = Field(default_factory=list)
 
 
+_ModelFamily = Literal[
+    "logistic_regression", "random_forest", "gradient_boosting", "xgboost", "lightgbm", "mlp"
+]
+
+
+class ApproachMemo(BaseModel):
+    """The literature scout's LLM-authored judgment (foundry/teams/modeling_team.py, M7) over
+    what foundry/tools/memory.py's search() returned for this dataset. recommended_families/
+    avoid_families reuse ExperimentSpec.model_family's own Literal so a scout can never recommend
+    a family experiment_planner isn't allowed to plan in the first place; the code guard in
+    literature_scout still re-filters both against SUPPORTED_MODEL_FAMILIES (installed in the
+    sandbox image) before trusting them, the same "LLM proposes, code disposes" split
+    experiment_planner already applies to ExperimentPlan.specs."""
+
+    summary: str
+    recommended_families: list[_ModelFamily] = Field(default_factory=list)
+    avoid_families: list[_ModelFamily] = Field(default_factory=list)
+    cautions: str = ""
+
+
+class LessonDraft(BaseModel):
+    """The lesson-writer's LLM-authored prose (foundry/teams/lessons.py, M7). Deliberately has no
+    numeric fields — the same structural guarantee ReportNarrative and RedTeamVerdict already
+    carry — so a persisted Lesson's best_model_family/best_metric_value (see Lesson below) can
+    only ever come from foundry/leaderboard.py's own computation, never from the model's telling
+    of it."""
+
+    text: str
+
+
 class TrainingCode(BaseModel):
     """The experiment runner's self-debug loop (foundry/teams/experiment_runner.py): the LLM's
     only output is this code string. Metrics never travel through the model — they are parsed
@@ -267,3 +297,32 @@ class CostEntry(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     usd: float
+
+
+class Lesson(BaseModel):
+    """One distilled record of a completed run (M7: "lessons... written to Store at end of
+    run"), assembled by foundry/teams/lessons.py from LessonDraft.text (the LLM's prose) plus
+    facts code already computed elsewhere in the run — best_model_family/best_metric_* by
+    cross-referencing state["leaderboard"]'s winner against state["experiment_plan"],
+    invalidated_categories/leak_columns from state["invalidations"]/state["leakage_findings"],
+    stop_reason and signed_off straight from state. Never LLM-authored itself, for the same
+    reason ExperimentResult and DataProfile aren't: foundry/teams/modeling_team.py's literature
+    scout later reads best_model_family to recommend a family, and a model-invented number there
+    would defeat the entire "metrics computed by code, never estimated by an LLM" guardrail one
+    hop removed. Stored as a plain JSON dict (Lesson.model_dump(mode="json")) in the LangGraph
+    Store, not via the checkpointer's msgpack serde — foundry/tools/memory.py validates it back
+    with Lesson.model_validate on read, skipping any record that fails (a cross-run store may
+    genuinely hold a record written by an older schema — a real system boundary, not defensive
+    padding)."""
+
+    dataset_ref: str
+    task_type: str
+    text: str
+    best_model_family: str | None = None
+    best_metric_name: str | None = None
+    best_metric_value: float | None = None
+    invalidated_categories: list[RedTeamCategory] = Field(default_factory=list)
+    leak_columns: list[str] = Field(default_factory=list)
+    stop_reason: str | None = None
+    signed_off: bool | None = None
+    created_at: datetime = Field(default_factory=datetime.now)

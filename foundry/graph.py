@@ -1,6 +1,6 @@
 """Graph assembly (SPEC M3: "V1 graph... Postgres checkpointing on"). Every team node routes
 via Command(goto=...) — including back to `principal` — so the only STATIC edges this graph
-needs are START -> principal, reporter -> final_gate -> END (M6), and (M4)
+needs are START -> principal, reporter -> final_gate -> lesson_writer -> END (M6/M7), and (M4)
 experiment_runner -> principal; everything else is dynamic routing, validated at compile time by
 each node's Command[Literal[...]] return annotation (verified against the installed LangGraph
 1.2.9 source: a typo'd goto target raises at .compile(), it is not a silent failure).
@@ -21,6 +21,16 @@ LangGraph's default is permissive for unregistered external types (a warning, no
 says so explicitly will change in a future release (see
 langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer's docstring) — every FoundryState field
 typed as a foundry.models class would otherwise start failing to deserialize on that upgrade.
+
+M7: build_graph takes an optional `store` (a LangGraph BaseStore, e.g. PostgresStore or
+InMemoryStore), passed straight to .compile(store=...) — verified against the installed LangGraph
+1.2.9 that this is a first-class compile argument, and that any node (including one reached via a
+nested subgraph .invoke() call, like modeling_team_node's) can read it back via
+langgraph.config.get_store(). `store=None` (the default) is also M8's memory on/off ablation
+switch: foundry/tools/memory.py treats "no store configured" identically to "no store reachable
+at all" (e.g. a node called directly in a unit test, outside any graph), degrading every memory
+read/write to a no-op rather than raising — the graph runs identically either way, just without
+cross-run lessons.
 """
 
 from __future__ import annotations
@@ -30,13 +40,15 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 
 from foundry.config import settings
 from foundry.gates import final_gate
 from foundry.state import FoundryState
 from foundry.teams.data_team import data_team_node
 from foundry.teams.experiment_runner import experiment_runner
-from foundry.teams.modeling_team import experiment_planner
+from foundry.teams.lessons import lesson_writer
+from foundry.teams.modeling_team import modeling_team_node
 from foundry.teams.principal import principal
 from foundry.teams.red_team import red_team_node
 from foundry.teams.reporter import reporter
@@ -54,6 +66,7 @@ ALLOWED_MSGPACK_MODULES: tuple[tuple[str, str], ...] = (
     ("foundry.models", "CostEntry"),
     ("foundry.models", "RedTeamFinding"),
     ("foundry.models", "HumanDecision"),
+    ("foundry.models", "ApproachMemo"),
 )
 
 
@@ -62,14 +75,19 @@ def configure_serde(checkpointer: BaseCheckpointSaver) -> BaseCheckpointSaver:
     return checkpointer
 
 
-def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
+def build_graph(
+    checkpointer: BaseCheckpointSaver | None = None, store: BaseStore | None = None
+) -> CompiledStateGraph:
     if checkpointer is not None:
         configure_serde(checkpointer)
 
     builder = StateGraph(FoundryState)
     builder.add_node("principal", principal)
     builder.add_node("data_team", data_team_node)
-    builder.add_node("experiment_planner", experiment_planner)
+    # M7: modeling_team is now a subgraph (literature_scout -> experiment_planner) reached via
+    # the same Command(goto=...) pattern as data_team/red_team — see
+    # foundry/teams/modeling_team.py's module docstring.
+    builder.add_node("modeling_team", modeling_team_node)
     # experiment_runner is reached only via Send (foundry/teams/principal.py's fan-out) with a
     # RunnerInput payload, never pulled with the full FoundryState — narrower than add_node's
     # declared signature expects, but exactly LangGraph's documented map-reduce pattern.
@@ -78,16 +96,21 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
     builder.add_node("reporter", reporter)
     # M6: a real interrupt() gate between reporter and END (SPEC: "sign-off on the winning model
     # + report before finalize") — a plain add_edge here, mirroring reporter's own "a single,
-    # static destination" wiring, since final_gate always goes to END regardless of the human's
-    # decision (see foundry/gates.py's module docstring for why the decline case doesn't loop).
+    # static destination" wiring, since final_gate always goes to lesson_writer regardless of the
+    # human's decision (see foundry/gates.py's module docstring for why the decline case doesn't
+    # loop, and foundry/teams/lessons.py's for why lessons are written either way).
     builder.add_node("final_gate", final_gate)
+    # M7: strictly after final_gate, never before — see foundry/teams/lessons.py's module
+    # docstring for why this placement is the one that never re-bills its LLM call on resume.
+    builder.add_node("lesson_writer", lesson_writer)
 
     builder.add_edge(START, "principal")
     builder.add_edge("experiment_runner", "principal")
     builder.add_edge("reporter", "final_gate")
-    builder.add_edge("final_gate", END)
+    builder.add_edge("final_gate", "lesson_writer")
+    builder.add_edge("lesson_writer", END)
 
-    return builder.compile(checkpointer=checkpointer)
+    return builder.compile(checkpointer=checkpointer, store=store)
 
 
 def initial_state(*, goal: str, dataset_ref: str, budget_usd: float) -> FoundryState:
@@ -100,6 +123,7 @@ def initial_state(*, goal: str, dataset_ref: str, budget_usd: float) -> FoundryS
         "leakage_findings": [],
         "cleaning_plan": None,
         "cv_strategy": None,
+        "approach_memo": None,
         "experiment_plan": [],
         "experiments": [],
         "leaderboard": [],

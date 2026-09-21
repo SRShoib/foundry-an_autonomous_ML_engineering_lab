@@ -14,6 +14,11 @@ stdin isn't a TTY and --auto-approve wasn't passed, the run is left paused at a 
 checkpoint — SPEC's "expensive runs pause for approval and resume via the API" is exactly this
 case, so the CLI reports the thread id and how to resume it via app/main.py rather than guessing
 an answer.
+
+M7: a LangGraph Store is opened alongside the checkpointer, same --checkpointer switch (Postgres
+for real runs, InMemoryStore for --checkpointer memory) — mirroring foundry/graph.py's own
+store=None default, `make run TASK=churn` twice in a row against Postgres is exactly SPEC's
+"demonstrate run #2 differing because of run #1's lessons" demo, no test harness required.
 """
 
 from __future__ import annotations
@@ -27,6 +32,8 @@ from typing import Any, cast
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.memory import InMemoryStore
+from langgraph.store.postgres import PostgresStore
 from langgraph.types import Command
 
 from foundry.config import settings
@@ -127,11 +134,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.checkpointer == "postgres"
         else nullcontext(InMemorySaver())
     )
+    store_cm = (
+        PostgresStore.from_conn_string(settings.database_url)
+        if args.checkpointer == "postgres"
+        else nullcontext(InMemoryStore())
+    )
 
-    with checkpointer_cm as checkpointer:
+    with checkpointer_cm as checkpointer, store_cm as store:
         if isinstance(checkpointer, PostgresSaver):
             checkpointer.setup()
-        graph = build_graph(checkpointer)
+        if isinstance(store, PostgresStore):
+            store.setup()
+        graph = build_graph(checkpointer, store)
 
         if args.show_thread_id is not None:
             snapshot = graph.get_state({"configurable": {"thread_id": args.show_thread_id}})
