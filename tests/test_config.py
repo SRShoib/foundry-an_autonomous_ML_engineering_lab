@@ -11,7 +11,7 @@ _ENV_VARS = (
     "SANDBOX_TIMEOUT_SECONDS",
     "COST_CAP_USD_TOTAL",
     "PRINCIPAL_MODEL",
-    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
     "PRINCIPAL_MAX_ITERATIONS",
     "MAX_EXPERIMENTS_TOTAL",
     "MAX_EXPERIMENTS_PER_ITERATION",
@@ -33,9 +33,12 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.sandbox_image == "foundry-sandbox:latest"
     assert settings.sandbox_network_disabled is True
     assert settings.cost_cap_usd_per_run <= settings.cost_cap_usd_total
-    assert settings.principal_model == settings.red_team_model
-    assert settings.worker_model != settings.principal_model
-    assert settings.anthropic_api_key is None
+    # Model tier defaults are all the cheapest priced current OpenAI model (gpt-5-nano) by
+    # explicit request — see foundry/config.py's comment. Each role's model stays independently
+    # configurable (SPEC), it just no longer differs at the DEFAULT.
+    assert settings.principal_model == settings.red_team_model == settings.worker_model
+    assert settings.principal_model == "gpt-5-nano"
+    assert settings.openai_api_key is None
 
     # M3: principal loop / self-debug caps (SPEC: "runner self-debug max k=3")
     assert settings.self_debug_max_attempts == 3

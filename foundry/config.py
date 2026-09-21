@@ -36,16 +36,24 @@ class Settings(BaseSettings):
     budget_gate_fraction: float = 0.8
     est_cost_usd_per_experiment: float = 0.25
 
-    # Model split — cheap workers/runners, strong principal + red team (SPEC)
-    principal_model: str = "claude-opus-5"
-    red_team_model: str = "claude-opus-5"
-    worker_model: str = "claude-haiku-4-5"
+    # Model tier — independently configurable per role (SPEC: "make the model split
+    # configurable"). Provider is OpenAI (foundry/llm.py's OpenAIClient); defaults set to the
+    # cheapest priced current model everywhere (gpt-5-nano, see foundry/tools/cost.py's
+    # MODEL_PRICING) per explicit user request — this deliberately departs from SPEC's own
+    # suggested default ("cheap workers/runners, strong principal + red team"), so the
+    # model-split-vs-uniform ablation (foundry/eval/ablations.py) has no split to compare against
+    # uniform under these defaults; override principal_model/red_team_model back to a stronger
+    # tier (e.g. gpt-5.5) to restore that comparison.
+    principal_model: str = "gpt-5-nano"
+    red_team_model: str = "gpt-5-nano"
+    worker_model: str = "gpt-5-nano"
 
-    # LLM interface (foundry/llm.py, M2) — no sampling params: rejected (400) on Opus 5 / Sonnet 5
+    # LLM interface (foundry/llm.py, M2) — no sampling params: GPT-5-family models reject any
+    # non-default temperature/top_p with a 400 (verified against current OpenAI API behavior).
     llm_max_tokens: int = 8192
     llm_max_parse_retries: int = 2
 
-    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
 
     # Principal loop (foundry/teams/principal.py, M3) — SPEC: "principal loop max iterations".
     # M5: a red_team audit pass and a remediation data_team re-run each cost an extra
@@ -104,7 +112,7 @@ class Settings(BaseSettings):
     eval_nominal_input_tokens: int = 1500
     eval_nominal_output_tokens: int = 400
 
-    # Cost model (foundry/tools/cost.py, foundry/llm.py, M4). Real Anthropic calls are priced
+    # Cost model (foundry/tools/cost.py, foundry/llm.py, M4). Real OpenAI calls are priced
     # from actual AIMessage.usage_metadata against foundry/tools/cost.py's per-model $/token
     # table; cost_per_llm_call_usd is the flat per-call fallback used only by StubClient, which
     # has no token usage to report (SPEC's "graph runs with NO api keys" guarantee, M2).

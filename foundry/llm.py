@@ -1,12 +1,13 @@
 """LLM interface (SPEC M2: "LLM interface with a deterministic stub — graph runs with NO api
-keys"). get_llm(role) is the single switch: with no ANTHROPIC_API_KEY it returns the module's
+keys"). get_llm(role) is the single switch: with no OPENAI_API_KEY it returns the module's
 StubClient singleton (wrapped for cost accounting), so the graph is fully runnable offline; with
-a key it returns a real ChatAnthropic-backed client, also wrapped. Every structured output goes
+a key it returns a real ChatOpenAI-backed client, also wrapped. Every structured output goes
 through .structured(...), which validates against a Pydantic schema and retries on parse failure
 (CLAUDE.md convention) — never returns free-form text for a field the graph will branch on.
 
-Sampling params (temperature/top_p/top_k) are deliberately never set: they are rejected with a
-400 on Claude Opus 5 and Sonnet 5 (verified against current docs, not memory, per CLAUDE.md).
+Sampling params (temperature/top_p/top_k) are deliberately never set: GPT-5-family models reject
+any non-default value with a 400 (verified against current OpenAI API behavior, not memory, per
+CLAUDE.md).
 
 get_llm returns a fresh MeteredClient per call (SPEC M4: "log per-agent cost"), never a shared
 meter — M4's Send fan-out runs several experiment_runner branches on separate threads
@@ -21,7 +22,7 @@ import hashlib
 from collections.abc import Callable
 from typing import Any, Literal, Protocol, TypeVar, cast
 
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, SecretStr
 
 from foundry.config import settings
@@ -53,21 +54,25 @@ def _model_for_role(role: AgentRole) -> str:
     }[role]
 
 
-class AnthropicClient:
-    """Real LLMClient backed by langchain_anthropic.ChatAnthropic. last_usage reflects the SUM
+class OpenAIClient:
+    """Real LLMClient backed by langchain_openai.ChatOpenAI. last_usage reflects the SUM
     of every underlying API call the most recent .structured() made — a parse-failure retry is
     still a real, billed request, so MeteredClient must not price only the winning attempt."""
 
     def __init__(self, role: AgentRole) -> None:
-        if not settings.anthropic_api_key:
-            raise ValueError("AnthropicClient requires ANTHROPIC_API_KEY to be set")
+        if not settings.openai_api_key:
+            raise ValueError("OpenAIClient requires OPENAI_API_KEY to be set")
         self._role = role
-        self._chat = ChatAnthropic(
-            model_name=_model_for_role(role),
-            max_tokens_to_sample=settings.llm_max_tokens,
-            api_key=SecretStr(settings.anthropic_api_key),
+        self._chat = ChatOpenAI(
+            model=_model_for_role(role),
+            # max_tokens/stop are the field NAMES; langchain_openai 1.5's ChatOpenAI aliases
+            # them to max_completion_tokens/stop_sequences for construction (verified against
+            # the installed package's Pydantic model_fields, not the docs page, which still
+            # documents the older max_tokens/stop constructor kwargs).
+            max_completion_tokens=settings.llm_max_tokens,
+            api_key=SecretStr(settings.openai_api_key),
             timeout=None,
-            stop=None,
+            stop_sequences=None,
         )
         self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 
@@ -104,7 +109,7 @@ class AnthropicClient:
                     )
                 )
         raise ValueError(
-            f"AnthropicClient({self._role}) failed to produce a valid {schema.__name__} "
+            f"OpenAIClient({self._role}) failed to produce a valid {schema.__name__} "
             f"after {attempts} attempt(s)"
         ) from last_error
 
@@ -141,9 +146,10 @@ class MeteredClient:
     """Wraps an LLMClient to record one CostEntry per .structured() call (SPEC M4: "log
     per-agent cost"). `model=None` prices at the flat cost_per_llm_call_usd rate (StubClient has
     no real token usage to report — SPEC's "graph runs with NO api keys" guarantee, M2); any
-    other value reads `inner.last_usage` (AnthropicClient) and prices via
-    foundry/tools/cost.py's per-model $/token table, so principal/red_team (opus) and worker
-    (haiku) calls are charged at genuinely different rates."""
+    other value reads `inner.last_usage` (OpenAIClient) and prices via foundry/tools/cost.py's
+    per-model $/token table, so each role is charged at whatever rate its configured model
+    actually costs — genuinely different rates whenever the roles are configured to different
+    models (see foundry/config.py's principal_model/red_team_model/worker_model)."""
 
     def __init__(self, role: AgentRole, inner: LLMClient, *, model: str | None) -> None:
         self._role: AgentRole = role
@@ -163,7 +169,7 @@ class MeteredClient:
                 )
             )
         else:
-            usage = cast(AnthropicClient, self._inner).last_usage
+            usage = cast(OpenAIClient, self._inner).last_usage
             usd = cost_tool.usd_for_tokens(
                 self._model,
                 input_tokens=usage["input_tokens"],
@@ -184,10 +190,10 @@ class MeteredClient:
 
 def get_llm(role: AgentRole) -> MeteredClient:
     # Falsy, not just `is None`: `cp .env.example .env` without filling in a key leaves
-    # ANTHROPIC_API_KEY="" (present but empty), which must be treated as "unset" too.
-    if not settings.anthropic_api_key:
+    # OPENAI_API_KEY="" (present but empty), which must be treated as "unset" too.
+    if not settings.openai_api_key:
         return MeteredClient(role, _stub_client, model=None)
-    return MeteredClient(role, AnthropicClient(role), model=_model_for_role(role))
+    return MeteredClient(role, OpenAIClient(role), model=_model_for_role(role))
 
 
 def get_stub_client() -> StubClient:

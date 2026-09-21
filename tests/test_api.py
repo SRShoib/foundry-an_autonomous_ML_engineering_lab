@@ -80,7 +80,7 @@ _CLEAN_AUDIT_REPORT = AuditReport(
 
 
 def _use_stub_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
     client = StubClient()
     register_canned_responses(client)
     for module in _ALL_TEAM_MODULES:
