@@ -164,7 +164,7 @@ def _use_stub_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
     foundry.llm.get_llm's own behavior — so concurrent Send-fanned-out experiment_runner
     branches (real threads; see foundry/teams/principal.py) each get an isolated `.costs` list
     instead of racing on one shared list."""
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
     client = StubClient()
     register_canned_responses(client)
     for module in _ALL_TEAM_MODULES:

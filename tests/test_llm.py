@@ -1,6 +1,6 @@
 """Tests for foundry/llm.py. No network calls: the StubClient tests exercise the deterministic
-canned-response registry directly, and the AnthropicClient retry tests swap in a fake chat
-object rather than hitting the real Anthropic API."""
+canned-response registry directly, and the OpenAIClient retry tests swap in a fake chat
+object rather than hitting the real OpenAI API."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 from pydantic import BaseModel
 
 from foundry.config import settings
-from foundry.llm import AnthropicClient, MeteredClient, StubClient, deterministic_seed, get_llm
+from foundry.llm import MeteredClient, OpenAIClient, StubClient, deterministic_seed, get_llm
 
 
 class _Greeting(BaseModel):
@@ -28,7 +28,7 @@ def _greeting_factory(prompt: str) -> _Greeting:
 
 
 def test_get_llm_returns_stub_when_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
     assert isinstance(get_llm("worker")._inner, StubClient)  # noqa: SLF001
     assert isinstance(get_llm("principal")._inner, StubClient)  # noqa: SLF001
 
@@ -36,23 +36,23 @@ def test_get_llm_returns_stub_when_no_api_key(monkeypatch: pytest.MonkeyPatch) -
 def test_get_llm_returns_stub_when_api_key_is_empty_string(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # `cp .env.example .env` without filling in a key leaves ANTHROPIC_API_KEY="" (present but
-    # empty) rather than unset — must be treated the same as None, not passed to AnthropicClient.
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    # `cp .env.example .env` without filling in a key leaves OPENAI_API_KEY="" (present but
+    # empty) rather than unset — must be treated the same as None, not passed to OpenAIClient.
+    monkeypatch.setattr(settings, "openai_api_key", "")
     assert isinstance(get_llm("worker")._inner, StubClient)  # noqa: SLF001
 
 
-def test_get_llm_returns_anthropic_client_when_key_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-00000000000000000000000000")
+def test_get_llm_returns_openai_client_when_key_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "openai_api_key", "sk-test-00000000000000000000000000")
     client = get_llm("worker")
-    assert isinstance(client._inner, AnthropicClient)  # noqa: SLF001
+    assert isinstance(client._inner, OpenAIClient)  # noqa: SLF001
 
 
 # --- MeteredClient / per-agent cost logging (M4) --------------------------------------------
 
 
 def test_metered_client_records_flat_rate_cost_for_stub(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
     client = get_llm("worker")
     stub = client._inner  # noqa: SLF001
     assert isinstance(stub, StubClient)
@@ -71,16 +71,16 @@ def test_metered_client_records_flat_rate_cost_for_stub(monkeypatch: pytest.Monk
 def test_metered_client_records_token_priced_cost_for_real_usage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-00000000000000000000000000")
+    monkeypatch.setattr(settings, "openai_api_key", "sk-test-00000000000000000000000000")
     client = get_llm("principal")
-    anthropic_client = client._inner  # noqa: SLF001
-    assert isinstance(anthropic_client, AnthropicClient)
+    openai_client = client._inner  # noqa: SLF001
+    assert isinstance(openai_client, OpenAIClient)
     good = _Greeting(text="ok", number=1)
 
     class _Raw:
         usage_metadata = {"input_tokens": 100, "output_tokens": 50}
 
-    anthropic_client._chat = _FakeChat(  # type: ignore[attr-defined]  # noqa: SLF001
+    openai_client._chat = _FakeChat(  # type: ignore[attr-defined]  # noqa: SLF001
         [{"raw": _Raw(), "parsed": good, "parsing_error": None}]
     )
 
@@ -95,7 +95,7 @@ def test_metered_client_records_token_priced_cost_for_real_usage(
 
 
 def test_metered_client_accumulates_one_entry_per_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
     client = get_llm("worker")
     stub = client._inner  # noqa: SLF001
     assert isinstance(stub, StubClient)
@@ -133,7 +133,7 @@ def test_stub_client_raises_for_unregistered_schema() -> None:
         stub.structured("anything", _Greeting)
 
 
-# --- AnthropicClient retry-on-parse-failure --------------------------------------------------
+# --- OpenAIClient retry-on-parse-failure --------------------------------------------------
 
 
 class _FakeStructuredRunnable:
@@ -154,20 +154,20 @@ class _FakeChat:
         return _FakeStructuredRunnable(self._results)
 
 
-def _anthropic_client(
+def _openai_client(
     monkeypatch: pytest.MonkeyPatch, *, max_parse_retries: int
-) -> AnthropicClient:
-    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test-00000000000000000000000000")
+) -> OpenAIClient:
+    monkeypatch.setattr(settings, "openai_api_key", "sk-test-00000000000000000000000000")
     monkeypatch.setattr(settings, "llm_max_parse_retries", max_parse_retries)
     metered = get_llm("worker")
     assert isinstance(metered, MeteredClient)
     client = metered._inner  # noqa: SLF001
-    assert isinstance(client, AnthropicClient)
+    assert isinstance(client, OpenAIClient)
     return client
 
 
-def test_anthropic_client_retries_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _anthropic_client(monkeypatch, max_parse_retries=2)
+def test_openai_client_retries_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _openai_client(monkeypatch, max_parse_retries=2)
     good = _Greeting(text="ok", number=1)
     client._chat = _FakeChat(  # type: ignore[attr-defined]
         [
@@ -179,8 +179,8 @@ def test_anthropic_client_retries_then_succeeds(monkeypatch: pytest.MonkeyPatch)
     assert client.structured("plan it", _Greeting) == good
 
 
-def test_anthropic_client_raises_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _anthropic_client(monkeypatch, max_parse_retries=1)
+def test_openai_client_raises_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _openai_client(monkeypatch, max_parse_retries=1)
     client._chat = _FakeChat(  # type: ignore[attr-defined]
         [
             {"raw": None, "parsed": None, "parsing_error": ValueError("bad json 1")},

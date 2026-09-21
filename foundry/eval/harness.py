@@ -93,7 +93,7 @@ def run_task(
     config_label: str = "full",
     thread_id: str | None = None,
 ) -> TaskResult:
-    if not settings.anthropic_api_key:
+    if not settings.openai_api_key:
         install_canned_responses()
 
     dataset = get_dataset(dataset_ref)

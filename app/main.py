@@ -57,7 +57,7 @@ def create_app(
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        if not settings.anthropic_api_key:
+        if not settings.openai_api_key:
             install_canned_responses()
         with checkpointer_factory() as checkpointer, store_factory() as store:
             if isinstance(checkpointer, PostgresSaver):
