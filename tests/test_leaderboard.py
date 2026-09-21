@@ -13,7 +13,7 @@ def _result(
     experiment_id: str,
     value: float,
     metric: str = "roc_auc",
-    status: Literal["success", "failed", "invalidated"] = "success",
+    status: Literal["success", "failed"] = "success",
 ) -> ExperimentResult:
     return ExperimentResult(
         experiment_id=experiment_id,
@@ -80,3 +80,20 @@ def test_target_met_is_direction_aware() -> None:
     assert target_met(0.85, 0.90, "roc_auc") is False
     assert target_met(4.0, 5.0, "rmse") is True
     assert target_met(6.0, 5.0, "rmse") is False
+
+
+def test_rank_experiments_excludes_invalidated_ids() -> None:
+    results = [_result("exp-001", 0.99), _result("exp-002", 0.80)]
+    board = rank_experiments(results, "roc_auc", frozenset({"exp-001"}))
+    assert [entry.experiment_id for entry in board] == ["exp-002"]
+
+
+def test_best_result_excludes_invalidated_ids() -> None:
+    results = [_result("exp-001", 0.99), _result("exp-002", 0.80)]
+    best = best_result(results, "roc_auc", frozenset({"exp-001"}))
+    assert best is not None and best.experiment_id == "exp-002"
+
+
+def test_best_result_is_none_when_everything_successful_is_invalidated() -> None:
+    results = [_result("exp-001", 0.99)]
+    assert best_result(results, "roc_auc", frozenset({"exp-001"})) is None

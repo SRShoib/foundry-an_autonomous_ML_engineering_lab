@@ -38,14 +38,17 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
 
-    # Principal loop (foundry/teams/principal.py, M3) — SPEC: "principal loop max iterations"
-    principal_max_iterations: int = 12
+    # Principal loop (foundry/teams/principal.py, M3) — SPEC: "principal loop max iterations".
+    # M5: a red_team audit pass and a remediation data_team re-run each cost an extra
+    # principal turn beyond what M4 budgeted for, so the cap needs headroom for that round trip.
+    principal_max_iterations: int = 20
     max_experiments_total: int = 6
     max_experiments_per_iteration: int = 3  # M4: one planning pass now fans out via Send
 
     # LangGraph's own default recursion_limit is 10007 (effectively unbounded) — M3 sets a real
     # cap so a routing bug fails fast with GraphRecursionError instead of running for minutes.
-    graph_recursion_limit: int = 40
+    # M5: bumped alongside principal_max_iterations for the same audit/remediation round trip.
+    graph_recursion_limit: int = 60
     # Bounds how many Send-fanned-out experiment_runner branches (each a real docker container,
     # foundry/tools/sandbox.py) run concurrently — verified against langchain_core's
     # get_executor_for_config: RunnableConfig.max_concurrency sets the BackgroundExecutor's
@@ -59,6 +62,21 @@ class Settings(BaseSettings):
     # sandbox_timeout_seconds=60 is tuned for M2's isolation tests, not for import + CV fitting.
     experiment_timeout_seconds: int = 300
     profile_timeout_seconds: int = 120
+    audit_timeout_seconds: int = 120
+
+    # Red team code floor (foundry/teams/red_team.py, M5) — evidence past these hard thresholds
+    # forces verdict="invalidated" regardless of what the red_team LLM judged (CLAUDE.md: "Hard
+    # cost caps and iteration limits everywhere the spec says so" — same "code owns the floor"
+    # ethos extended to the audit). audit_leak_auc_threshold applies to
+    # foundry/tools/audit.py's per-column target association (numeric AUC or the categorical
+    # in-sample target-encoded AUC); audit_duplicate_row_rate to its exact-duplicate-row rate;
+    # audit_suspicious_metric_ceiling to the experiment's own reported primary metric, for
+    # metrics known to be bounded in [0, 1] (roc_auc/accuracy/f1 — see
+    # foundry/leaderboard.py's metric_direction) where a near-perfect CV score is implausible on
+    # real, noisy tabular data regardless of what the audit evidence shows.
+    audit_leak_auc_threshold: float = 0.95
+    audit_duplicate_row_rate: float = 0.05
+    audit_suspicious_metric_ceiling: float = 0.999
 
     # Cost model (foundry/tools/cost.py, foundry/llm.py, M4). Real Anthropic calls are priced
     # from actual AIMessage.usage_metadata against foundry/tools/cost.py's per-model $/token

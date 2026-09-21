@@ -43,6 +43,23 @@ REGISTRY: dict[str, DatasetSpec] = {
             "data team must flag as a leak, not a feature."
         ),
     ),
+    "churn_leaky": DatasetSpec(
+        name="churn_leaky",
+        path=settings.data_dir / "churn_leaky.csv",
+        target_column="churned",
+        task_type="binary_classification",
+        primary_metric="roc_auc",
+        target_value=0.90,
+        description=(
+            "M5 red-team fixture, not a showcase task: churn.csv's generative model (300 rows) "
+            "plus one categorical column, retention_call_outcome, standing in for a retention "
+            "call that only happens after the churn decision is already made. It is invisible "
+            "to the data team's leak scan (foundry/tools/profiler.py computes target_auc only "
+            "for numeric columns) and survives cleaning untouched, driving CV roc_auc to an "
+            "implausible level. Exists to prove the red team catches what the data team's scan "
+            "misses — see data/samples/README.md for the measured numbers."
+        ),
+    ),
 }
 
 

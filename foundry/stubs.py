@@ -35,6 +35,7 @@ from foundry.models import (
     LeakageReport,
     PrincipalDirective,
     ProfileAssessment,
+    RedTeamVerdict,
     ReportNarrative,
     TrainingCode,
 )
@@ -42,6 +43,7 @@ from foundry.prompting import read_context
 from foundry.teams.experiment_runner import CodeRequest
 from foundry.teams.modeling_team import PlanContext
 from foundry.teams.principal import SupervisorContext
+from foundry.teams.red_team import RedTeamContext
 from foundry.teams.reporter import ReportContext
 from foundry.tools.profiler import RawProfile
 
@@ -337,6 +339,57 @@ def _principal_directive(prompt: str) -> PrincipalDirective:
     )
 
 
+# --- RedTeamVerdict --------------------------------------------------------------------------
+
+
+def _red_team_verdict(prompt: str) -> RedTeamVerdict:
+    """Deliberately agrees with the measured evidence rather than being adversarially permissive
+    — the code floor in foundry/teams/red_team.py's `_apply_floor` is what the booby-trap tests
+    exercise against a hostile "always valid" fake LLM; this stub exists so the offline
+    (no-API-key) path renders a believable audit trail, not to stress the floor itself."""
+    context = read_context(prompt, RedTeamContext)
+    if (
+        context.worst_column_target_auc is not None
+        and context.worst_column_target_auc >= settings.audit_leak_auc_threshold
+    ):
+        return RedTeamVerdict(
+            verdict="invalidated",
+            category="leakage",
+            explanation=(
+                f"Column {context.worst_column_name!r} measures target-association AUC "
+                f"{context.worst_column_target_auc:.3f} on {context.experiment_id}'s training "
+                "data — a likely target proxy."
+            ),
+            recommendation=f"Drop column {context.worst_column_name!r} and retrain.",
+        )
+    if context.duplicate_row_rate >= settings.audit_duplicate_row_rate:
+        return RedTeamVerdict(
+            verdict="invalidated",
+            category="contamination",
+            explanation=(
+                f"{context.duplicate_row_rate:.1%} of rows are exact duplicates — likely "
+                "train/test contamination under an ungrouped CV split."
+            ),
+            recommendation="Deduplicate the dataset or switch to a grouped CV strategy.",
+        )
+    if context.primary_metric_value >= settings.audit_suspicious_metric_ceiling:
+        return RedTeamVerdict(
+            verdict="invalidated",
+            category="validation_overfitting",
+            explanation=(
+                f"{context.primary_metric} of {context.primary_metric_value:.4f} is implausibly "
+                "close to perfect for real, noisy tabular data."
+            ),
+            recommendation="Re-examine the validation protocol before trusting this result.",
+        )
+    return RedTeamVerdict(
+        verdict="valid",
+        category="validation_overfitting",
+        explanation="No leakage, contamination, or implausible-metric evidence found.",
+        recommendation="No action needed.",
+    )
+
+
 # --- ReportNarrative -----------------------------------------------------------------------------
 
 
@@ -372,6 +425,7 @@ def register_canned_responses(client: StubClient) -> None:
     client.register(ExperimentPlan, _experiment_plan)
     client.register(TrainingCode, _training_code)
     client.register(PrincipalDirective, _principal_directive)
+    client.register(RedTeamVerdict, _red_team_verdict)
     client.register(ReportNarrative, _report_narrative)
 
 

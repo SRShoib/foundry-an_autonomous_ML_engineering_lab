@@ -53,6 +53,14 @@ class DataTeamState(TypedDict):
     dataset_ref: str
     data_profile: DataProfile | None
     leakage_findings: list[LeakageFinding]
+    # M5: plain, input-only — populated by data_team_node from the PARENT's cumulative
+    # state["leakage_findings"] (across a prior pass and any red_team invocation) before this
+    # subgraph runs. Not in DATA_TEAM_OUTPUT_KEYS: nothing here is echoed back, so the parent's
+    # own leakage_findings add-reducer keeps accumulating exactly as before. Without this, a
+    # remediation re-run's cleaner would only ever see THIS pass's fresh re-profiling — and a
+    # categorical leak the profiler's heuristics can't detect would never get force-dropped on
+    # the very re-run that exists to drop it (see foundry/teams/red_team.py's module docstring).
+    known_high_severity_columns: list[str]
     cleaning_plan: CleaningPlan | None
     cv_strategy: CVStrategy | None
     errors: Annotated[list[str], operator.add]
@@ -129,12 +137,14 @@ def cleaner(state: DataTeamState) -> dict[str, object]:
     )
 
     # Code guards: the LLM's plan is a starting point, not the final word. Never drop the
-    # target column no matter what the plan says; force-drop every column the profiler
-    # flagged as a leak (or that a high-severity finding names) even if the plan missed it.
+    # target column no matter what the plan says; force-drop every column the profiler flagged
+    # as a leak, that a high-severity finding from THIS pass names, or that a PRIOR pass (or the
+    # red team) already proved high-severity — even if the plan missed it.
     drop = set(plan.drop_columns)
     drop.discard(data_profile.target_column)
     drop |= {col.name for col in data_profile.columns if col.is_potential_leak}
     drop |= {f.column for f in state["leakage_findings"] if f.severity == "high"}
+    drop |= set(state["known_high_severity_columns"])
 
     plan = plan.model_copy(update={"drop_columns": sorted(drop)})
     return {"cleaning_plan": plan, "costs": llm.costs}
@@ -180,11 +190,15 @@ def build_data_team() -> CompiledStateGraph:
 
 
 def data_team_node(state: FoundryState) -> Command[Literal["principal"]]:
+    known_high_severity = sorted(
+        {finding.column for finding in state["leakage_findings"] if finding.severity == "high"}
+    )
     sub_input: DataTeamState = {
         "goal": state["goal"],
         "dataset_ref": state["dataset_ref"],
         "data_profile": None,
         "leakage_findings": [],
+        "known_high_severity_columns": known_high_severity,
         "cleaning_plan": None,
         "cv_strategy": None,
         "errors": [],  # deliberately empty, not state["errors"] — both schemas use

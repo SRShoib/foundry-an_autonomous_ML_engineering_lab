@@ -37,6 +37,7 @@ from foundry.teams.data_team import data_team_node
 from foundry.teams.experiment_runner import experiment_runner
 from foundry.teams.modeling_team import experiment_planner
 from foundry.teams.principal import principal
+from foundry.teams.red_team import red_team_node
 from foundry.teams.reporter import reporter
 
 # Every foundry.models type that a FoundryState field holds directly (or in a list) and that
@@ -50,6 +51,7 @@ ALLOWED_MSGPACK_MODULES: tuple[tuple[str, str], ...] = (
     ("foundry.models", "ExperimentResult"),
     ("foundry.models", "LeaderboardEntry"),
     ("foundry.models", "CostEntry"),
+    ("foundry.models", "RedTeamFinding"),
 )
 
 
@@ -70,6 +72,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
     # RunnerInput payload, never pulled with the full FoundryState — narrower than add_node's
     # declared signature expects, but exactly LangGraph's documented map-reduce pattern.
     builder.add_node("experiment_runner", experiment_runner)  # pyright: ignore[reportArgumentType]
+    builder.add_node("red_team", red_team_node)
     builder.add_node("reporter", reporter)
 
     builder.add_edge(START, "principal")
@@ -93,6 +96,7 @@ def initial_state(*, goal: str, dataset_ref: str, budget_usd: float) -> FoundryS
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "audited_experiments": [],
         "costs": [],
         "lessons": [],
         "report_md": None,

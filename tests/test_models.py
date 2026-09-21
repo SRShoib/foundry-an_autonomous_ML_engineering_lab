@@ -17,6 +17,7 @@ from foundry.models import (
     LeaderboardEntry,
     LeakageFinding,
     RedTeamFinding,
+    RedTeamVerdict,
     SandboxLimits,
     SandboxResult,
 )
@@ -85,6 +86,28 @@ def test_experiment_result_rejects_unknown_status() -> None:
             status="pending",  # type: ignore[arg-type]
             cost_usd=0.0,
             duration_s=0.0,
+        )
+
+
+def test_experiment_result_no_longer_accepts_invalidated_as_a_status() -> None:
+    """M5: invalidation is recorded in state["invalidations"], never written back into
+    ExperimentResult.status — see foundry/leaderboard.py and foundry/teams/red_team.py."""
+    with pytest.raises(ValidationError):
+        ExperimentResult(
+            experiment_id="exp-1",
+            status="invalidated",  # type: ignore[arg-type]
+            cost_usd=0.0,
+            duration_s=0.0,
+        )
+
+
+def test_red_team_verdict_rejects_unknown_category() -> None:
+    with pytest.raises(ValidationError):
+        RedTeamVerdict(
+            verdict="valid",
+            category="bribery",  # type: ignore[arg-type]
+            explanation="",
+            recommendation="",
         )
 
 

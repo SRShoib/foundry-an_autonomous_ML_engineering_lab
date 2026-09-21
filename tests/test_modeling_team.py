@@ -9,9 +9,11 @@ from typing import Any, Literal
 import pytest
 from langgraph.types import Command
 
-from foundry.models import ExperimentPlan, ExperimentSpec
+from foundry.models import ExperimentPlan, ExperimentResult, ExperimentSpec, RedTeamFinding
+from foundry.prompting import read_context
 from foundry.state import FoundryState
 from foundry.teams import modeling_team
+from foundry.teams.modeling_team import PlanContext
 
 _ModelFamily = Literal[
     "logistic_regression", "random_forest", "gradient_boosting", "xgboost", "lightgbm", "mlp"
@@ -22,8 +24,10 @@ class _FixedPlanLLM:
     def __init__(self, plan: ExperimentPlan) -> None:
         self._plan = plan
         self.costs: list[Any] = []
+        self.last_prompt: str | None = None
 
     def structured(self, prompt: str, schema: type, *, system: str | None = None) -> Any:
+        self.last_prompt = prompt
         return self._plan
 
 
@@ -46,6 +50,7 @@ def _state(**overrides: Any) -> FoundryState:
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "audited_experiments": [],
         "costs": [],
         "lessons": [],
         "report_md": None,
@@ -115,3 +120,30 @@ def test_experiment_ids_are_code_assigned_unique_and_appended(
     assert len(new_plan) == 2
     assert new_plan[0] is existing  # appended, not replaced
     assert new_plan[1].experiment_id == "exp-002"
+
+
+def test_plan_context_carries_recent_invalidations_and_excludes_them_from_best_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M5: an invalidated experiment's inflated metric must not leak into best_metric_so_far,
+    and its finding's recommendation should reach the LLM's context so a replacement spec is
+    planned in light of it."""
+    plan = ExperimentPlan(specs=[_spec("random_forest")])
+    llm = _FixedPlanLLM(plan)
+    monkeypatch.setattr(modeling_team, "get_llm", lambda role: llm)
+
+    leaky = ExperimentResult(
+        experiment_id="exp-001", status="success", metrics={"roc_auc": 0.99}, cost_usd=0.1,
+        duration_s=1.0,
+    )
+    finding = RedTeamFinding(
+        experiment_id="exp-001", category="leakage", verdict="invalidated",
+        explanation="target-association AUC clears the threshold",
+        recommendation="drop the leak column and retrain",
+    )
+    modeling_team.experiment_planner(_state(experiments=[leaky], invalidations=[finding]))
+
+    assert llm.last_prompt is not None
+    context = read_context(llm.last_prompt, PlanContext)
+    assert context.best_metric_so_far is None
+    assert context.recent_invalidations == ["leakage: drop the leak column and retrain"]

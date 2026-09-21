@@ -10,7 +10,15 @@ metric_direction encodes which primary metrics rank higher-is-better (roc_auc, a
 lower-is-better (rmse) — SPEC only ships roc_auc today (churn dataset), but
 foundry/teams/principal.py's "target metric hit" stop condition would be silently backwards for
 rmse the moment M8 adds a regression task, so direction is threaded through now rather than
-assumed via a bare max()."""
+assumed via a bare max().
+
+M5: `invalidated_ids` excludes red-team-invalidated experiments from ranking/best. An experiment
+never gets its own ExperimentResult rewritten — state["experiments"] is an operator.add channel,
+so an element can only be appended, never edited in place — the verdict about a result lives
+separately, in state["invalidations"] (foundry/teams/red_team.py), and this module is the one
+place that reconciles the two. Both callers (foundry/teams/principal.py every turn,
+foundry/teams/reporter.py at the end) derive the same set from state["invalidations"] — see
+foundry/teams/principal.py's `_invalidated_ids`."""
 
 from __future__ import annotations
 
@@ -33,17 +41,23 @@ def target_met(value: float, target: float, metric: str) -> bool:
 
 
 def _successful_scores(
-    results: Sequence[ExperimentResult], metric: str
+    results: Sequence[ExperimentResult], metric: str, invalidated_ids: frozenset[str]
 ) -> list[tuple[ExperimentResult, float]]:
     return [
         (result, result.metrics[metric])
         for result in results
-        if result.status == "success" and metric in result.metrics
+        if result.status == "success"
+        and metric in result.metrics
+        and result.experiment_id not in invalidated_ids
     ]
 
 
-def rank_experiments(results: Sequence[ExperimentResult], metric: str) -> list[LeaderboardEntry]:
-    scored = _successful_scores(results, metric)
+def rank_experiments(
+    results: Sequence[ExperimentResult],
+    metric: str,
+    invalidated_ids: frozenset[str] = frozenset(),
+) -> list[LeaderboardEntry]:
+    scored = _successful_scores(results, metric, invalidated_ids)
     scored.sort(key=lambda pair: pair[1], reverse=metric_direction(metric) == "higher_is_better")
     return [
         LeaderboardEntry(
@@ -57,8 +71,12 @@ def rank_experiments(results: Sequence[ExperimentResult], metric: str) -> list[L
     ]
 
 
-def best_result(results: Sequence[ExperimentResult], metric: str) -> ExperimentResult | None:
-    scored = _successful_scores(results, metric)
+def best_result(
+    results: Sequence[ExperimentResult],
+    metric: str,
+    invalidated_ids: frozenset[str] = frozenset(),
+) -> ExperimentResult | None:
+    scored = _successful_scores(results, metric, invalidated_ids)
     if not scored:
         return None
     pick = min if metric_direction(metric) == "lower_is_better" else max
