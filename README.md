@@ -6,7 +6,7 @@ trained model, an experiment report, and a model card. See [SPEC.md](SPEC.md) fo
 architecture and milestone plan; see [CLAUDE.md](CLAUDE.md) for project conventions and
 guardrails.
 
-This repo is built one milestone at a time. **Status: M1 (scaffold) complete.**
+This repo is built one milestone at a time. **Status: M2 (foundations) complete.**
 
 ## Requirements
 
@@ -26,7 +26,9 @@ make smoke                   # proves the guardrails: sandbox isolation, checkpo
 
 make lint                    # ruff
 make typecheck                # pyright
-make test                    # pytest (fast, no docker required)
+make test                    # pytest — unit tests always run; @pytest.mark.docker tests
+                              # (real sandbox isolation checks) run too if Docker + the
+                              # sandbox image are available, and skip automatically if not
 
 make down                    # stop postgres + mlflow
 ```
@@ -43,3 +45,10 @@ MLflow UI: http://localhost:5000
 - **Postgres, not SQLite, for both the checkpointer and MLflow**: one server, two databases,
   matching how this would actually be deployed, and giving the LangGraph checkpointer real
   durability across process restarts from day one.
+- **The graph must run with no API keys**: `foundry/llm.py` swaps in a deterministic stub
+  whenever `ANTHROPIC_API_KEY` is unset, so the graph and its tests are never gated on a live
+  model or network access.
+- **Metrics are never estimated by an LLM**: `foundry/models.py` splits structured types into
+  LLM-authored (plans, findings, profiles) and code-authored (`ExperimentResult`, sandbox
+  output) groups — the stub's canned-response registry only covers the former, so wiring an
+  LLM to produce a metric fails loudly instead of silently.

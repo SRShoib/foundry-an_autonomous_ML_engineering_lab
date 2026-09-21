@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     sandbox_image: str = "foundry-sandbox:latest"
     sandbox_memory_limit: str = "512m"
     sandbox_cpu_limit: float = 1.0
+    sandbox_pids_limit: int = 128
     sandbox_timeout_seconds: int = 60
     sandbox_network_disabled: bool = True
 
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
     principal_model: str = "claude-opus-5"
     red_team_model: str = "claude-opus-5"
     worker_model: str = "claude-haiku-4-5"
+
+    # LLM interface (foundry/llm.py, M2) — no sampling params: rejected (400) on Opus 5 / Sonnet 5
+    llm_max_tokens: int = 8192
+    llm_max_parse_retries: int = 2
 
     anthropic_api_key: str | None = None
 
