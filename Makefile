@@ -1,4 +1,4 @@
-.PHONY: up down sandbox-build smoke sample-data run lint fmt typecheck test
+.PHONY: up down sandbox-build smoke sample-data run api lint fmt typecheck test
 
 up:
 	docker compose up -d --build --wait
@@ -17,6 +17,9 @@ sample-data:
 
 run:
 	uv run python -m foundry.cli --task $(TASK)
+
+api:
+	uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 lint:
 	uv run ruff check .

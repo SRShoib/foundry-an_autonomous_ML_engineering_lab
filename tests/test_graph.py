@@ -1,16 +1,25 @@
 """Tests for foundry/graph.py. build_graph() compiling at all is itself a proof that every
 Command[Literal[...]] goto target names a real node — LangGraph 1.2.9 validates that at
-.compile() time (verified against the installed source), it does not fail silently."""
+.compile() time (verified against the installed source), it does not fail silently.
+
+M6: every offline end-to-end run now pauses at the real final_gate interrupt() before it can
+reach report_md/stop_reason — graph.invoke() returns the paused state plus an "__interrupt__" key
+rather than raising (verified against the installed LangGraph 1.2.9), so a test that only checked
+final values without ever resuming would still "pass" while silently no longer exercising the
+gate at all. _resume_through_final_gate asserts the pause actually happened (and that it is the
+final gate, not some other interrupt) before resuming with an approval to reach true completion."""
 
 from __future__ import annotations
 
 import threading
 import time
-from typing import Any, get_type_hints
+from typing import Any, cast, get_type_hints
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
+from langgraph.types import Command
 
 from foundry.config import settings
 from foundry.graph import build_graph, initial_state, run_config
@@ -160,12 +169,30 @@ def _use_stub_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
 
+def _resume_through_final_gate(
+    graph: Any, config: RunnableConfig, paused_state: dict[str, Any]
+) -> dict[str, Any]:
+    """Asserts the run genuinely paused at the real final_gate interrupt() (M6), then approves
+    it to reach true completion. None of these fixtures ever project a single-run cost above
+    settings.cost_cap_usd_per_run or total spend above settings.budget_gate_fraction * budget_usd
+    (stub costs are a few cents against a $20 budget), so the final gate is the only interrupt
+    these offline runs ever hit."""
+    interrupts = paused_state.get("__interrupt__")
+    assert interrupts, "expected the run to pause at final_gate before completing"
+    assert interrupts[0].value["gate"] == "final"
+    assert paused_state["report_md"], "reporter must have already run before the final gate pauses"
+    return cast(
+        "dict[str, Any]",
+        graph.invoke(Command(resume={"approved": True, "note": "approved in test"}), config),
+    )
+
+
 def test_build_graph_compiles_with_expected_nodes() -> None:
     graph = build_graph()
     nodes = set(graph.get_graph().nodes) - {"__start__", "__end__"}
     assert nodes == {
         "principal", "data_team", "experiment_planner", "experiment_runner", "red_team",
-        "reporter",
+        "reporter", "final_gate",
     }
 
 
@@ -232,7 +259,9 @@ def test_send_fanout_runs_in_parallel_and_never_loses_cost(
 
     graph = build_graph(InMemorySaver())
     state = initial_state(goal="predict churn", dataset_ref="churn", budget_usd=20.0)
-    final_state = graph.invoke(state, run_config("fanout-test"))
+    config = run_config("fanout-test")
+    paused_state = graph.invoke(state, config)
+    final_state = _resume_through_final_gate(graph, config, paused_state)
 
     assert len(final_state["experiments"]) == settings.max_experiments_per_iteration
     assert len(seen_threads) >= 2  # genuinely parallel, not serialized onto one thread
@@ -251,14 +280,19 @@ def test_end_to_end_offline_run_with_in_memory_checkpointer(
 
     graph = build_graph(InMemorySaver())
     state = initial_state(goal="predict churn", dataset_ref="churn", budget_usd=20.0)
-    final_state = graph.invoke(state, run_config("e2e-test"))
+    config = run_config("e2e-test")
+    paused_state = graph.invoke(state, config)
+    final_state = _resume_through_final_gate(graph, config, paused_state)
 
     assert final_state["report_md"]
+    assert "## Sign-off" in final_state["report_md"]
+    assert "APPROVED" in final_state["report_md"]
     assert final_state["stop_reason"] is not None
     assert final_state["iteration_count"] > 1
     assert any(result.status == "success" for result in final_state["experiments"])
     assert final_state["costs"]  # M4: per-agent cost ledger populated
     assert final_state["leaderboard"]  # M4: principal maintains this every turn
+    assert [d.gate for d in final_state["human_decisions"]] == ["final"]  # M6
 
 
 def test_booby_trap_offline_end_to_end_catches_and_remediates_the_leak(
@@ -282,7 +316,9 @@ def test_booby_trap_offline_end_to_end_catches_and_remediates_the_leak(
 
     graph = build_graph(InMemorySaver())
     state = initial_state(goal="predict churn", dataset_ref="churn_leaky", budget_usd=20.0)
-    final_state = graph.invoke(state, run_config("booby-trap-test"))
+    config = run_config("booby-trap-test")
+    paused_state = graph.invoke(state, config)
+    final_state = _resume_through_final_gate(graph, config, paused_state)
 
     invalidated_ids = {
         finding.experiment_id
@@ -308,6 +344,10 @@ def test_booby_trap_offline_end_to_end_catches_and_remediates_the_leak(
 
 @pytest.mark.postgres
 def test_postgres_checkpoint_survives_a_fresh_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """M6: the pending final_gate interrupt itself — not just the completed report — must
+    survive a fresh connection, proving the gate is really checkpointer-backed (CLAUDE.md: "both
+    interrupt() gates are real and checkpointer-backed") rather than an artifact of one
+    in-process graph object."""
     import uuid
 
     from langgraph.checkpoint.postgres import PostgresSaver
@@ -319,9 +359,19 @@ def test_postgres_checkpoint_survives_a_fresh_connection(monkeypatch: pytest.Mon
         checkpointer.setup()
         graph = build_graph(checkpointer)
         state = initial_state(goal="predict churn", dataset_ref="churn", budget_usd=20.0)
-        graph.invoke(state, run_config(thread_id))
+        paused_state = graph.invoke(state, run_config(thread_id))
+        assert paused_state.get("__interrupt__"), "expected a pause at the final gate"
 
     with PostgresSaver.from_conn_string(settings.database_url) as checkpointer:
         graph = build_graph(checkpointer)
         snapshot = graph.get_state({"configurable": {"thread_id": thread_id}})
-        assert snapshot.values["report_md"]
+        assert snapshot.interrupts, "the final gate's pending approval must survive a reconnect"
+        assert snapshot.interrupts[0].value["gate"] == "final"
+        assert snapshot.values["report_md"]  # reporter already ran before the gate paused
+
+        final_state = graph.invoke(
+            Command(resume={"approved": True, "note": "approved after reconnect"}),
+            run_config(thread_id),
+        )
+        assert final_state["stop_reason"] is not None
+        assert "APPROVED" in final_state["report_md"]
