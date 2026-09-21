@@ -126,3 +126,9 @@ def get_llm(role: AgentRole) -> LLMClient:
     if not settings.anthropic_api_key:
         return _stub_client
     return AnthropicClient(role)
+
+
+def get_stub_client() -> StubClient:
+    """The module-singleton StubClient, for foundry/stubs.py and tests to register canned
+    responses on without reaching into the private `_stub_client` name."""
+    return _stub_client
