@@ -18,6 +18,7 @@ from foundry.models import (
     LeakageReport,
     PrincipalDirective,
     ProfileAssessment,
+    RedTeamVerdict,
     ReportNarrative,
     TrainingCode,
 )
@@ -26,6 +27,7 @@ from foundry.stubs import register_canned_responses
 from foundry.teams.experiment_runner import CodeRequest
 from foundry.teams.modeling_team import PlanContext
 from foundry.teams.principal import SupervisorContext
+from foundry.teams.red_team import RedTeamContext
 from foundry.teams.reporter import ReportContext
 from foundry.tools.profiler import RawColumnStats, RawProfile
 
@@ -111,6 +113,7 @@ def test_registry_covers_exactly_the_expected_schemas() -> None:
         ExperimentPlan,
         TrainingCode,
         PrincipalDirective,
+        RedTeamVerdict,
         ReportNarrative,
     }
     assert set(client._registry) == expected
@@ -280,6 +283,51 @@ def test_principal_directive_stops_with_target_met() -> None:
     result = _client().structured(with_context("decide", ctx), PrincipalDirective)
     assert result.should_continue is False
     assert result.stop_reason == "target_met"
+
+
+def _red_team_context(**overrides: Any) -> RedTeamContext:
+    base = RedTeamContext(
+        experiment_id="exp-001",
+        primary_metric="roc_auc",
+        primary_metric_value=0.85,
+        metrics={"roc_auc": 0.85},
+        cv_kind="stratified_kfold",
+        cv_n_splits=5,
+        task_type="binary_classification",
+        n_rows=300,
+        duplicate_row_rate=0.0,
+        worst_column_name=None,
+        worst_column_target_auc=None,
+    )
+    return base.model_copy(update=overrides)
+
+
+def test_red_team_verdict_invalidates_on_leak_evidence() -> None:
+    ctx = _red_team_context(
+        worst_column_name="retention_call_outcome", worst_column_target_auc=0.9962
+    )
+    result = _client().structured(with_context("audit", ctx), RedTeamVerdict)
+    assert result.verdict == "invalidated"
+    assert result.category == "leakage"
+
+
+def test_red_team_verdict_invalidates_on_contamination_evidence() -> None:
+    ctx = _red_team_context(duplicate_row_rate=0.2)
+    result = _client().structured(with_context("audit", ctx), RedTeamVerdict)
+    assert result.verdict == "invalidated"
+    assert result.category == "contamination"
+
+
+def test_red_team_verdict_invalidates_on_an_implausible_metric() -> None:
+    ctx = _red_team_context(primary_metric_value=0.9999, metrics={"roc_auc": 0.9999})
+    result = _client().structured(with_context("audit", ctx), RedTeamVerdict)
+    assert result.verdict == "invalidated"
+    assert result.category == "validation_overfitting"
+
+
+def test_red_team_verdict_stays_valid_on_clean_evidence() -> None:
+    result = _client().structured(with_context("audit", _red_team_context()), RedTeamVerdict)
+    assert result.verdict == "valid"
 
 
 def test_report_narrative_has_no_numeric_fields() -> None:

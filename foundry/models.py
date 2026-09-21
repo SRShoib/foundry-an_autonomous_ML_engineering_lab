@@ -119,15 +119,37 @@ class ReportNarrative(BaseModel):
     recommendation: str
 
 
+RedTeamCategory = Literal[
+    "leakage",
+    "contamination",
+    "improper_cv",
+    "validation_overfitting",
+    "seed_hacking",
+]
+
+
+class RedTeamVerdict(BaseModel):
+    """The red team's LLM-authored judgment (foundry/teams/red_team.py) over one
+    AuditReport-backed candidate. Deliberately carries no numeric fields — same rule as
+    ReportNarrative — so a verdict can never smuggle a metric the audit tool didn't itself
+    measure. foundry/teams/red_team.py's code floor can force verdict="invalidated" past what
+    this model returns, but never the reverse: the LLM can invalidate on judgment alone even
+    when no code threshold fired (SPEC: "adversarial auditor... can mark an experiment
+    INVALIDATED"), it just cannot talk its way past one that did."""
+
+    verdict: Literal["valid", "invalidated"]
+    category: RedTeamCategory
+    explanation: str
+    recommendation: str
+
+
 class RedTeamFinding(BaseModel):
+    """Code-assembled record (foundry/teams/red_team.py) of one RedTeamVerdict plus the
+    experiment_id it was rendered against — the unit foundry/state.py's `invalidations`
+    add-reducer accumulates, and what foundry/leaderboard.py filters leaderboard candidates by."""
+
     experiment_id: str
-    category: Literal[
-        "leakage",
-        "contamination",
-        "improper_cv",
-        "validation_overfitting",
-        "seed_hacking",
-    ]
+    category: RedTeamCategory
     verdict: Literal["valid", "invalidated"]
     explanation: str
     recommendation: str
@@ -179,7 +201,7 @@ class SandboxResult(BaseModel):
 class ExperimentResult(BaseModel):
     experiment_id: str
     mlflow_run_id: str | None = None
-    status: Literal["success", "failed", "invalidated"]
+    status: Literal["success", "failed"]
     metrics: dict[str, float] = Field(default_factory=dict)
     cost_usd: float
     duration_s: float

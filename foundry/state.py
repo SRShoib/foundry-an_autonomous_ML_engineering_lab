@@ -39,14 +39,24 @@ class FoundryState(TypedDict):
     spent_usd: float
 
     data_profile: DataProfile | None
-    leakage_findings: list[LeakageFinding]
+    # Add-reducer (M5): a red_team remediation cycle re-runs data_team, whose profiler/cleaner
+    # append a fresh batch of findings on top of the first pass's — a plain overwrite would lose
+    # the very leak the first pass already caught while the second pass reconfirms it.
+    leakage_findings: Annotated[list[LeakageFinding], operator.add]
     cleaning_plan: CleaningPlan | None
     cv_strategy: CVStrategy | None
 
     experiment_plan: list[ExperimentSpec]
     experiments: Annotated[list[ExperimentResult], operator.add]
     leaderboard: list[LeaderboardEntry]
-    invalidations: list[RedTeamFinding]
+    # Add-reducer (M5): every RedTeamFinding the red team has ever rendered (valid or
+    # invalidated) — the audit trail foundry/leaderboard.py filters candidates by and
+    # foundry/teams/reporter.py renders, never overwritten by a later audit pass.
+    invalidations: Annotated[list[RedTeamFinding], operator.add]
+    # Add-reducer (M5): experiment_ids the red team has already rendered a verdict for, distinct
+    # from `invalidations`' contents so foundry/teams/principal.py can find "audited" in O(1)
+    # without re-deriving it from RedTeamFinding.experiment_id every turn.
+    audited_experiments: Annotated[list[str], operator.add]
 
     # Add-reducer (M4): parallel Send-fanned-out experiment_runner branches each contribute their
     # own entries in the same superstep — spent_usd is derived from this sum by the principal
