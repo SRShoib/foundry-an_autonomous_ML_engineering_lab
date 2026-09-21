@@ -9,21 +9,21 @@ from foundry.tools.cost import project_run_usd, sandbox_cost_usd, usd_for_tokens
 
 
 def test_usd_for_tokens_uses_registered_price() -> None:
-    cost = usd_for_tokens("claude-haiku-4-5", input_tokens=1_000_000, output_tokens=0)
-    assert cost == pytest.approx(1.00)
+    cost = usd_for_tokens("gpt-5-nano", input_tokens=1_000_000, output_tokens=0)
+    assert cost == pytest.approx(0.05)
 
-    cost = usd_for_tokens("claude-opus-5", input_tokens=0, output_tokens=1_000_000)
-    assert cost == pytest.approx(25.00)
+    cost = usd_for_tokens("gpt-5.5", input_tokens=0, output_tokens=1_000_000)
+    assert cost == pytest.approx(30.00)
 
 
 def test_usd_for_tokens_combines_input_and_output() -> None:
-    cost = usd_for_tokens("claude-sonnet-5", input_tokens=1_000_000, output_tokens=1_000_000)
-    assert cost == pytest.approx(3.00 + 15.00)
+    cost = usd_for_tokens("gpt-5", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost == pytest.approx(1.25 + 10.00)
 
 
 def test_usd_for_tokens_unpriced_model_raises() -> None:
     with pytest.raises(KeyError, match="no pricing registered"):
-        usd_for_tokens("claude-nonexistent", input_tokens=1, output_tokens=1)
+        usd_for_tokens("gpt-nonexistent", input_tokens=1, output_tokens=1)
 
 
 def test_sandbox_cost_usd_scales_with_duration() -> None:

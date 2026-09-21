@@ -16,3 +16,7 @@ mlartifacts/
 artifacts/
 
 .DS_Store
+
+model.pkl
+CLAUDE.md
+.claude/

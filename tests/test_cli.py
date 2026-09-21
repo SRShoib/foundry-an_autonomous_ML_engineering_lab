@@ -42,7 +42,7 @@ def test_run_with_memory_checkpointer_writes_artifacts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
 
     final_state = {
         "report_md": "# report",
@@ -73,7 +73,7 @@ def test_auto_approve_answers_the_gate_without_prompting(
     graph only reaches `final_state` on its SECOND invoke() call, so the test fails if the CLI
     ever skips the pause instead of actually resuming it."""
     monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
 
     paused_state = {
         "report_md": "# report",
@@ -118,7 +118,7 @@ def test_paused_gate_without_auto_approve_or_a_tty_leaves_the_run_paused(
     """SPEC: "expensive runs pause for approval and resume via the API" — with no human to answer
     on stdin, the CLI must report the pause and exit non-zero rather than inventing an answer."""
     monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
 
     paused_state = {
         "report_md": "# report",

@@ -1,7 +1,7 @@
 """SPEC's definition of done: `make up && make run TASK=churn`. Selects a checkpointer
 (Postgres for real runs — SPEC M3: "Postgres checkpointing on"; in-memory via
 `--checkpointer memory` for quick offline demos), installs the deterministic LLM stub when no
-ANTHROPIC_API_KEY is set (mirroring foundry/llm.py::get_llm's own switch, done once here rather
+OPENAI_API_KEY is set (mirroring foundry/llm.py::get_llm's own switch, done once here rather
 than inside get_llm to keep fixtures out of the library's hot path — see foundry/stubs.py), runs
 the graph to completion, and writes the report/model card to
 settings.artifacts_dir/<thread_id>/.
@@ -156,7 +156,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(report)
             return 0
 
-        if not settings.anthropic_api_key:
+        if not settings.openai_api_key:
             install_canned_responses()
 
         dataset = get_dataset(args.task)
