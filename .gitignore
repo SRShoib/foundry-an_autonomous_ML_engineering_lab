@@ -13,5 +13,6 @@ build/
 
 mlruns/
 mlartifacts/
+artifacts/
 
 .DS_Store
