@@ -16,6 +16,7 @@ from typing import Annotated, Literal
 from typing_extensions import TypedDict
 
 from foundry.models import (
+    ApproachMemo,
     CleaningPlan,
     CostEntry,
     CVStrategy,
@@ -53,6 +54,11 @@ class FoundryState(TypedDict):
     cleaning_plan: CleaningPlan | None
     cv_strategy: CVStrategy | None
 
+    # M7: the literature scout's most recent recommendation (foundry/teams/modeling_team.py),
+    # consumed by the very next experiment_planner call. Plain, not an add-reducer: exactly one
+    # scout call precedes each planner call in the modeling_team subgraph, so "last write wins"
+    # is correct — there is never a concurrent writer to reconcile, unlike Send-fanned-out fields.
+    approach_memo: ApproachMemo | None
     experiment_plan: list[ExperimentSpec]
     experiments: Annotated[list[ExperimentResult], operator.add]
     leaderboard: list[LeaderboardEntry]
