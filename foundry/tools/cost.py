@@ -9,7 +9,7 @@ foundry/llm.py is the only caller for the LLM half; foundry/teams/experiment_run
 sandbox_cost_usd directly for the sandbox-compute half. Neither call site estimates a token count
 itself — real usage comes from AIMessage.usage_metadata (foundry/llm.py) or is simply absent for
 the deterministic stub, which is priced at a flat per-call rate instead (SPEC's "crude,
-deterministic cost model" persists for the no-API-key path; only the real Anthropic path gets
+deterministic cost model" persists for the no-API-key path; only the real OpenAI path gets
 real token accounting)."""
 
 from __future__ import annotations
@@ -27,11 +27,12 @@ class ModelPrice(BaseModel):
     output_per_mtok_usd: float
 
 
-# Verified against the Claude API pricing reference at plan time, not memory (CLAUDE.md).
+# Verified against developers.openai.com/api/docs/pricing at plan time (fetched live), not
+# memory (CLAUDE.md) — pricing changes too often to trust a remembered figure.
 MODEL_PRICING: dict[str, ModelPrice] = {
-    "claude-opus-5": ModelPrice(input_per_mtok_usd=5.00, output_per_mtok_usd=25.00),
-    "claude-sonnet-5": ModelPrice(input_per_mtok_usd=3.00, output_per_mtok_usd=15.00),
-    "claude-haiku-4-5": ModelPrice(input_per_mtok_usd=1.00, output_per_mtok_usd=5.00),
+    "gpt-5.5": ModelPrice(input_per_mtok_usd=5.00, output_per_mtok_usd=30.00),
+    "gpt-5": ModelPrice(input_per_mtok_usd=1.25, output_per_mtok_usd=10.00),
+    "gpt-5-nano": ModelPrice(input_per_mtok_usd=0.05, output_per_mtok_usd=0.40),
 }
 
 

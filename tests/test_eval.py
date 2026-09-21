@@ -41,7 +41,7 @@ _ALL_MODULES_WITH_GET_LLM = (
 
 
 def _use_stub_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
     client = StubClient()
     register_canned_responses(client)
     for module in _ALL_MODULES_WITH_GET_LLM:
@@ -249,13 +249,14 @@ def test_monolith_on_leaky_fixture_reports_the_unaudited_leaky_metric(
 
 
 def test_projected_cost_uniform_is_strictly_cheaper_than_split_for_an_identical_call_mix() -> None:
+    """Pure pricing-math test, deliberately independent of whatever settings.principal_model
+    etc. currently default to (which, as of this project's own config, are all the same cheapest
+    model — see foundry/config.py's comment) — this exercises _projected_usd's math against a
+    hypothetical split (a stronger tier for principal/red_team) vs. uniform-cheap, both real
+    entries in foundry/tools/cost.py's MODEL_PRICING."""
     calls = {"principal": 3, "red_team": 2, "worker": 5}
-    split_roles = {
-        "principal": settings.principal_model,
-        "red_team": settings.red_team_model,
-        "worker": settings.worker_model,
-    }
-    uniform_roles = dict.fromkeys(split_roles, settings.worker_model)
+    split_roles = {"principal": "gpt-5.5", "red_team": "gpt-5.5", "worker": "gpt-5-nano"}
+    uniform_roles = dict.fromkeys(split_roles, "gpt-5-nano")
 
     split_usd = report._projected_usd(calls, split_roles)
     uniform_usd = report._projected_usd(calls, uniform_roles)

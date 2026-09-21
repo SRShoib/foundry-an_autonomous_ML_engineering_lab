@@ -1,6 +1,6 @@
 """`python -m foundry.eval` (Makefile: `make eval`) — SPEC M8's "Definition of done": "make eval
 prints the metrics + ablation table." Mirrors foundry/cli.py's own shape: installs the
-deterministic LLM stub when no ANTHROPIC_API_KEY is set (foundry/llm.py's own switch), runs the
+deterministic LLM stub when no OPENAI_API_KEY is set (foundry/llm.py's own switch), runs the
 full task/ablation matrix (foundry/eval/ablations.py::run_task_matrix, once per dataset, or just
 one dataset's via --task), prints the rendered tables to stdout, and writes the raw TaskResult
 list to artifacts/eval/results.json + the results region of README.md in place
@@ -58,7 +58,7 @@ def _write_outputs(results: list[TaskResult]) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    if not settings.anthropic_api_key:
+    if not settings.openai_api_key:
         install_canned_responses()
 
     tasks = (args.task,) if args.task is not None else TASKS

@@ -1,7 +1,7 @@
 """The only module containing canned data (SPEC M2: "graph runs with NO api keys"). No
 foundry/teams/* module imports this one — the dependency runs stubs -> teams, never the
 reverse, so fixtures never leak into a production node's import path. Registration happens in
-exactly two places: foundry/cli.py::main() (guarded by `settings.anthropic_api_key is None`)
+exactly two places: foundry/cli.py::main() (guarded by `settings.openai_api_key is None`)
 and tests — never from foundry.llm.get_llm(), which would put fixtures in the hot path.
 
 Each factory is read_context(prompt, <the node's context model>) -> build a deterministic

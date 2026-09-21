@@ -137,7 +137,7 @@ def _projected_usd(calls_by_agent: dict[str, int], role_model: dict[str, str]) -
 
 
 def render_model_split_table(results: list[TaskResult]) -> str:
-    """SPEC ablation: "model-split vs uniform." Offline (no ANTHROPIC_API_KEY), StubClient reports
+    """SPEC ablation: "model-split vs uniform." Offline (no OPENAI_API_KEY), StubClient reports
     no real token usage — every call is priced at one flat rate (foundry/llm.py's MeteredClient),
     so the split and uniform configurations would show a zero cost difference despite making a
     genuinely different number of calls to each role. This table instead projects each
@@ -209,7 +209,7 @@ def render_all(results: list[TaskResult]) -> str:
         f"\\* projected: real per-role LLM call counts priced at published `$/Mtok` rates "
         f"({sorted(MODEL_PRICING)}) using a fixed nominal token count per call "
         f"({settings.eval_nominal_input_tokens} in / {settings.eval_nominal_output_tokens} out) — "
-        "not a measured spend. A real spend difference requires ANTHROPIC_API_KEY set.",
+        "not a measured spend. A real spend difference requires OPENAI_API_KEY set.",
     ]
     return "\n".join(sections)
 
