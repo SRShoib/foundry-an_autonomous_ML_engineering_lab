@@ -7,7 +7,7 @@ from __future__ import annotations
 import operator
 from typing import get_args, get_type_hints
 
-from foundry.models import ExperimentResult, HumanDecision
+from foundry.models import CostEntry, ExperimentResult, HumanDecision
 from foundry.state import FoundryState
 
 
@@ -44,6 +44,16 @@ def test_human_decisions_use_add_reducer_and_concatenate() -> None:
     assert [d.gate for d in merged] == ["budget", "final"]
 
 
+def test_costs_field_uses_add_reducer_and_concatenates() -> None:
+    reducer = _reducer("costs")
+    assert reducer is operator.add
+
+    left = [CostEntry(agent_role="worker", model="m", kind="llm", usd=0.01)]
+    right = [CostEntry(agent_role="sandbox", model="sandbox", kind="sandbox", usd=0.02)]
+    merged = reducer(left, right)  # type: ignore[operator]
+    assert [c.agent_role for c in merged] == ["worker", "sandbox"]
+
+
 def test_dataset_ref_holds_a_reference_not_raw_data() -> None:
     state: FoundryState = {
         "goal": "predict churn",
@@ -58,6 +68,7 @@ def test_dataset_ref_holds_a_reference_not_raw_data() -> None:
         "experiments": [],
         "leaderboard": [],
         "invalidations": [],
+        "costs": [],
         "lessons": [],
         "report_md": None,
         "model_card_md": None,

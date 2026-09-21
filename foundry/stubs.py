@@ -8,12 +8,14 @@ Each factory is read_context(prompt, <the node's context model>) -> build a dete
 response -> return. Determinism is therefore structural (a pure function of the typed context),
 not seeded — the same inputs always produce the same canned output.
 
-TrainingCode is the interesting one: the first experiment's attempt 0 emits deliberately naive
-code (raw DataFrame straight to the estimator, no imputation or encoding), which fails with
-`ValueError: could not convert string to float` — the single most common real failure mode of
-LLM-authored sklearn code. Every other attempt emits the correct ColumnTransformer pipeline. So
-the offline run genuinely exercises the self-debug loop once, without paying an extra container
-start on every later experiment.
+TrainingCode is the interesting one: only the very first runner of the very first Send-fanned-out
+batch (attempt 0, prior_experiments == 0, batch_index == 0 — see RunnerInput in
+foundry/teams/experiment_runner.py) emits deliberately naive code (raw DataFrame straight to the
+estimator, no imputation or encoding), which fails with `ValueError: could not convert string to
+float` — the single most common real failure mode of LLM-authored sklearn code. Every other
+attempt, and every other runner in that same parallel batch, emits the correct ColumnTransformer
+pipeline. So the offline run genuinely exercises the self-debug loop exactly once, without paying
+an extra container start per parallel branch.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from __future__ import annotations
 from string import Template
 from typing import Literal
 
+from foundry.config import settings
 from foundry.llm import StubClient, get_stub_client
 from foundry.models import (
     CleaningPlan,
@@ -137,19 +140,27 @@ _FAMILY_SEQUENCE: list[_ModelFamily] = [
 
 
 def _experiment_plan(prompt: str) -> ExperimentPlan:
+    """Proposes up to max_experiments_per_iteration DISTINCT families per pass (M4: one planning
+    pass now fans out via Send, so a single-spec plan would leave the fan-out with nothing to
+    parallelize) — falls back to repeating the last family once every family has been tried."""
     context = read_context(prompt, PlanContext)
     remaining: list[_ModelFamily] = [
         f for f in _FAMILY_SEQUENCE if f not in context.prior_model_families
     ]
-    family: _ModelFamily = remaining[0] if remaining else _FAMILY_SEQUENCE[-1]
-    spec = ExperimentSpec(
-        experiment_id="stub",  # overwritten by foundry/teams/modeling_team.py's code guard
-        model_family=family,
-        hyperparams={},
-        rationale=f"Escalating from prior attempts ({context.prior_model_families}) to {family}.",
-        est_cost_usd=0.01,
-    )
-    return ExperimentPlan(specs=[spec])
+    families = remaining[: settings.max_experiments_per_iteration] or [_FAMILY_SEQUENCE[-1]]
+    specs = [
+        ExperimentSpec(
+            experiment_id="stub",  # overwritten by foundry/teams/modeling_team.py's code guard
+            model_family=family,
+            hyperparams={},
+            rationale=(
+                f"Escalating from prior attempts ({context.prior_model_families}) to {family}."
+            ),
+            est_cost_usd=0.01,
+        )
+        for family in families
+    ]
+    return ExperimentPlan(specs=specs)
 
 
 # --- TrainingCode ---------------------------------------------------------------------------
@@ -275,8 +286,13 @@ print("$sentinel " + json.dumps({{"$primary_metric": auc}}))
 
 
 def _training_code(prompt: str) -> TrainingCode:
+    # batch_index == 0 as well as prior_experiments == 0: under M4's Send fan-out, every runner
+    # in the FIRST batch shares prior_experiments == 0 (none of its siblings have finished yet
+    # when the batch launches — see foundry/teams/principal.py's _fanout), so without also
+    # gating on batch_index every parallel branch would emit the deliberately-buggy naive code
+    # and burn N extra containers instead of exactly one.
     request = read_context(prompt, CodeRequest)
-    if request.attempt == 0 and request.prior_experiments == 0:
+    if request.attempt == 0 and request.prior_experiments == 0 and request.batch_index == 0:
         return TrainingCode(
             code=_naive_code(request),
             reasoning=(
