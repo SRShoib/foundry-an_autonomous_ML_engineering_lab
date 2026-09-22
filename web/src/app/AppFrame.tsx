@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 import { cn } from "../lib/cn";
 
@@ -12,6 +12,10 @@ interface AppFrameProps {
   dock?: ReactNode;
   /** Which region a below-frame viewport shows. Above the breakpoint both are always docked. */
   mobileView?: "main" | "dock";
+  /** The centre column's own scroll container — the ONE scrolling channel (§5). The activity feed
+   * reads its scroll position off this to drive follow-mode, rather than the feed nesting a second
+   * scroller of its own inside it. */
+  mainRef?: Ref<HTMLElement>;
   children: ReactNode;
 }
 
@@ -33,6 +37,7 @@ export function AppFrame({
   rail,
   dock,
   mobileView = "main",
+  mainRef,
   children,
 }: AppFrameProps) {
   return (
@@ -53,6 +58,7 @@ export function AppFrame({
 
       <main
         id="main"
+        ref={mainRef}
         className={cn(
           "min-h-0 min-w-0 flex-1 overflow-y-auto bg-surface-deck frame:block",
           mobileView !== "main" && "hidden",

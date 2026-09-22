@@ -1,19 +1,21 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import type { ApprovalGate } from "../api/types";
+import { ActivityFeed } from "../app/ActivityFeed";
 import { AppFrame } from "../app/AppFrame";
+import { BudgetMeter } from "../app/BudgetMeter";
 import { InstrumentBar } from "../app/InstrumentBar";
+import { Leaderboard } from "../app/Leaderboard";
 import { MobileTabs, panelId, tabId, type Tab } from "../app/MobileTabs";
 import { DivergenceNotice } from "../app/ReplayTransport";
+import { RunRail } from "../app/RunRail";
 import { TopBar, type Meta } from "../app/TopBar";
 import { Button } from "../components/ui/Button";
 import { LiveRegion } from "../components/ui/LiveRegion";
 import { Panel } from "../components/ui/Panel";
-import { EmptyState } from "../components/states/EmptyState";
 import { ErrorState } from "../components/states/ErrorState";
 import { Skeleton, SkeletonLines } from "../components/states/Skeleton";
 import { cn } from "../lib/cn";
-import { formatUsd } from "../lib/format";
 import { useRunSource } from "../run/RunSourceContext";
 import { useEventFeed } from "../run/useEventFeed";
 
@@ -28,13 +30,15 @@ const TABS: readonly Tab<MobileTab>[] = [
 /** The view a run is watched through — live or replayed. It reads RunSourceState and nothing else,
  * which is the whole point: it has no idea which kind of source it has, and must not.
  *
- * M9b builds the FRAME and proves the source streams through it. What sits inside the frame is
- * deliberately raw and is replaced stage by stage: the feed rows and team rails (M9c), the phase
- * ladder, budget meter and leaderboard (M9c), the approval dialogs and red-team alert (M9d). */
-export function RunView({ meta }: { meta: readonly Meta[] }) {
+ * M9b built the FRAME and proved the source streams through it. M9c filled it with the real
+ * instruments: the feed's team rails and two-line rows, the rail's phase ladder/team roster/cost
+ * breakdown, the budget meter, and the leaderboard. What is still a raw stand-in — the gate dialogs
+ * and the red-team finding — is M9d's. */
+export function RunView({ goal, meta }: { goal?: string; meta: readonly Meta[] }) {
   const { source, state } = useRunSource();
   const feed = useEventFeed(state.events);
   const [tab, setTab] = useState<MobileTab>("activity");
+  const mainRef = useRef<HTMLElement>(null);
 
   const status = state.status;
   const failed = status?.status === "failed";
@@ -48,6 +52,7 @@ export function RunView({ meta }: { meta: readonly Meta[] }) {
   return (
     <AppFrame
       mobileView={tab === "activity" ? "main" : "dock"}
+      mainRef={mainRef}
       topBar={
         <TopBar
           meta={meta}
@@ -67,30 +72,15 @@ export function RunView({ meta }: { meta: readonly Meta[] }) {
         />
       }
       tabs={<MobileTabs tabs={TABS} active={tab} onChange={setTab} label="Run view" />}
-      rail={
-        <div className="flex flex-col gap-6">
-          <Skeleton className="h-10" />
-          <SkeletonLines lines={5} />
-          <SkeletonLines lines={6} />
-        </div>
-      }
+      rail={<RunRail {...(goal === undefined ? {} : { goal })} events={state.events} status={status} />}
       dock={
         <div className="flex flex-col gap-4">
           <div id={panelId("board")} className={cn("flex flex-col gap-4", tab === "audit" && "hidden frame:flex")}>
-            <Panel
-              title="budget"
-              meta={status ? <span className="num">{formatUsd(status.budget_usd)}</span> : undefined}
-            >
-              {status ? (
-                <p className="num text-xl text-fg">{formatUsd(status.spent_usd)}</p>
-              ) : (
-                <Skeleton className="h-8 w-24" />
-              )}
-            </Panel>
-            <Panel title="leaderboard">
-              <SkeletonLines lines={4} />
-            </Panel>
+            <BudgetMeter status={status} />
+            <Leaderboard status={status} />
           </div>
+          {/* M9d's: the red-team finding, its evidence and remediation status. Left as a stand-in
+              skeleton — the choreography that fills it (§8) is built together with this panel. */}
           <div id={panelId("audit")} className={cn(tab === "board" && "hidden frame:block")}>
             <Panel title="audit">
               <SkeletonLines lines={3} />
@@ -140,31 +130,13 @@ export function RunView({ meta }: { meta: readonly Meta[] }) {
         </div>
         )}
 
-        {/* M9c replaces this raw list with the real feed: team rails, two-line rows, virtualization. */}
-        {feed.visible.length === 0 ? (
-          <div className="px-4">
-            {state.connection === "open" ? (
-              <EmptyState
-                title="No events yet"
-                hint="Events appear here as the agent teams work, starting with the principal's first routing decision."
-              />
-            ) : (
-              <SkeletonLines lines={6} className="py-4" />
-            )}
-          </div>
-        ) : (
-          <ol aria-label="Activity feed" className="flex flex-col">
-            {feed.visible.map((event) => (
-              <li
-                key={event.seq}
-                className="grid grid-cols-[3rem_1fr] gap-3 border-b border-line-hairline px-4 py-2"
-              >
-                <span className="num text-xs text-fg-muted">{String(event.seq).padStart(3, "0")}</span>
-                <span className="text-sm text-fg">{event.summary}</span>
-              </li>
-            ))}
-          </ol>
-        )}
+        <ActivityFeed
+          events={feed.visible}
+          batchSize={feed.batchSize}
+          ratePerSecond={feed.ratePerSecond}
+          connected={state.connection === "open"}
+          scrollElementRef={mainRef}
+        />
       </div>
 
       <LiveRegion message={announcement} />
@@ -214,9 +186,7 @@ export function RunViewSkeleton({ error }: { error?: ReactNode }) {
       }
       dock={
         <div className="flex flex-col gap-4">
-          <Panel title="budget">
-            <Skeleton className="h-8 w-24" />
-          </Panel>
+          <BudgetMeter status={null} />
           <Panel title="leaderboard">
             <SkeletonLines lines={4} />
           </Panel>

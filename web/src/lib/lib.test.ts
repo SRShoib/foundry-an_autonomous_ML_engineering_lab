@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cn } from "./cn";
-import { formatClock, formatMetric, formatUsd, formatUsdPrecise, shortId } from "./format";
+import { formatClock, formatMetric, formatTime, formatUsd, formatUsdPrecise, shortId } from "./format";
 import { METER_CRITICAL_AT, METER_PRESSURE_AT, meterTone, spendFraction } from "./meter";
 
 describe("meter", () => {
@@ -48,6 +48,19 @@ describe("format", () => {
     expect(formatClock(83.9)).toBe("1:23");
     expect(formatClock(3600)).toBe("60:00");
     expect(formatClock(-4)).toBe("0:00");
+  });
+
+  it("formats a feed row's timestamp as the environment's local HH:MM:SS", () => {
+    const iso = "2026-01-01T14:02:11.000Z";
+    const date = new Date(iso);
+    const two = (n: number) => String(n).padStart(2, "0");
+    const expected = `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
+    expect(formatTime(iso)).toBe(expected);
+  });
+
+  it("pads midnight as 00, not 24 (hourCycle h23)", () => {
+    const iso = new Date(2026, 0, 1, 0, 5, 9).toISOString();
+    expect(formatTime(iso)).toBe("00:05:09");
   });
 });
 
