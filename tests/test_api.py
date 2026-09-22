@@ -208,6 +208,31 @@ def test_run_status_exposes_experiments_audit_trail_profile_card_and_cost(
     assert {finding["verdict"] for finding in status["invalidations"]} == {"valid"}
 
 
+def test_run_status_exposes_goal_dataset_and_updated_at(client: TestClient) -> None:
+    """M9e: the runs-home table's dataset/goal/updated columns (docs/design-plan.md §6)."""
+    start = client.post("/runs", json={"task": "churn", "goal": "predict churn"})
+    thread_id = start.json()["thread_id"]
+    _wait_until(lambda: client.get(f"/runs/{thread_id}").json()["status"] != "running")
+
+    status = client.get(f"/runs/{thread_id}").json()
+    assert status["goal"] == "predict churn"
+    assert status["dataset_ref"] == "churn"
+    assert status["updated_at"] is not None
+
+    listed = next(r for r in client.get("/runs").json() if r["thread_id"] == thread_id)
+    assert listed["goal"] == "predict churn"
+    assert listed["dataset_ref"] == "churn"
+
+
+def test_list_datasets_returns_the_registry_without_a_host_path(client: TestClient) -> None:
+    datasets = client.get("/datasets").json()
+    assert [d["key"] for d in datasets] == ["churn", "churn_leaky", "energy"]
+    churn = next(d for d in datasets if d["key"] == "churn")
+    assert churn["primary_metric"] == "roc_auc"
+    assert churn["description"]
+    assert "path" not in churn
+
+
 def test_events_carry_a_server_side_non_decreasing_timestamp(client: TestClient) -> None:
     thread_id = _run_to_final_gate(client)
 

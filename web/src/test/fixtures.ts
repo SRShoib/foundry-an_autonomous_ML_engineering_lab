@@ -1,12 +1,14 @@
 import type {
   ActivityEvent,
   AuditEvidence,
+  DatasetOption,
   ExperimentResult,
   PendingApproval,
   RedTeamFinding,
   Replay,
   ReplayFrame,
   RunStatus,
+  TaskResult,
 } from "../api/types";
 
 /** Small factories for tests. Every one is typed from the generated schema, so a field added to the
@@ -28,6 +30,9 @@ export function makeRunStatus(overrides: Partial<RunStatus> = {}): RunStatus {
     model_card_md: null,
     data_profile: null,
     cost_by_agent: {},
+    goal: "predict churn",
+    dataset_ref: "churn",
+    updated_at: "2026-01-01T00:00:00Z",
     ...overrides,
   };
 }
@@ -87,6 +92,42 @@ export function makeFinding(
     explanation: "e",
     recommendation: "r",
     evidence: verdict === "invalidated" ? makeEvidence() : null,
+    ...overrides,
+  };
+}
+
+export function makeTaskResult(overrides: Partial<TaskResult> = {}): TaskResult {
+  return {
+    dataset_ref: "churn",
+    config: "full",
+    approach: "hierarchical",
+    thread_id: "eval-churn-full",
+    stop_reason: "diminishing_returns",
+    primary_metric_name: "roc_auc",
+    primary_metric_value: 0.85,
+    target_value: 0.9,
+    target_met: false,
+    n_experiments: 3,
+    n_successful: 3,
+    n_invalidated: 0,
+    cost_total_usd: 0.18,
+    cost_by_agent: {},
+    calls_by_agent: {},
+    wall_time_s: 287,
+    winning_model_family: "logistic_regression",
+    first_model_family: "logistic_regression",
+    error: null,
+    ...overrides,
+  };
+}
+
+export function makeDatasetOption(overrides: Partial<DatasetOption> = {}): DatasetOption {
+  return {
+    key: "churn",
+    name: "churn",
+    task_type: "binary_classification",
+    primary_metric: "roc_auc",
+    description: "Synthetic telecom churn dataset.",
     ...overrides,
   };
 }

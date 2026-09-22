@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/datasets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Datasets */
+        get: operations["list_datasets_datasets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/eval": {
         parameters: {
             query?: never;
@@ -273,6 +290,30 @@ export interface components {
             notes: string;
             /** Target Column */
             target_column: string;
+            /**
+             * Task Type
+             * @enum {string}
+             */
+            task_type: "binary_classification" | "multiclass_classification" | "regression";
+        };
+        /**
+         * DatasetOption
+         * @description M9e: what the console's start-a-run panel needs to populate its dataset select
+         *     (docs/design-plan.md §6) — deliberately NOT DatasetSpec itself, which carries `path`, a host
+         *     filesystem path the API must never publish.
+         */
+        DatasetOption: {
+            /** Description */
+            description: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Primary Metric
+             * @enum {string}
+             */
+            primary_metric: "roc_auc" | "accuracy" | "f1" | "rmse";
             /**
              * Task Type
              * @enum {string}
@@ -562,10 +603,14 @@ export interface components {
                 [key: string]: number;
             };
             data_profile: components["schemas"]["DataProfile"] | null;
+            /** Dataset Ref */
+            dataset_ref: string | null;
             /** Error */
             error: string | null;
             /** Experiments */
             experiments: components["schemas"]["ExperimentResult"][];
+            /** Goal */
+            goal: string | null;
             /** Invalidations */
             invalidations: components["schemas"]["RedTeamFinding"][];
             /** Leaderboard */
@@ -589,6 +634,8 @@ export interface components {
             stop_reason: string | null;
             /** Thread Id */
             thread_id: string;
+            /** Updated At */
+            updated_at: string | null;
         };
         /** StartRunRequest */
         StartRunRequest: {
@@ -698,6 +745,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PendingApproval"][];
+                };
+            };
+        };
+    };
+    list_datasets_datasets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOption"][];
                 };
             };
         };

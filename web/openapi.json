@@ -251,6 +251,51 @@
         "title": "DataProfile",
         "type": "object"
       },
+      "DatasetOption": {
+        "description": "M9e: what the console's start-a-run panel needs to populate its dataset select\n(docs/design-plan.md \u00a76) \u2014 deliberately NOT DatasetSpec itself, which carries `path`, a host\nfilesystem path the API must never publish.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "primary_metric": {
+            "enum": [
+              "roc_auc",
+              "accuracy",
+              "f1",
+              "rmse"
+            ],
+            "title": "Primary Metric",
+            "type": "string"
+          },
+          "task_type": {
+            "enum": [
+              "binary_classification",
+              "multiclass_classification",
+              "regression"
+            ],
+            "title": "Task Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "task_type",
+          "primary_metric",
+          "description"
+        ],
+        "title": "DatasetOption",
+        "type": "object"
+      },
       "ExperimentResult": {
         "properties": {
           "attempt_history": {
@@ -896,6 +941,17 @@
               }
             ]
           },
+          "dataset_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Ref"
+          },
           "error": {
             "anyOf": [
               {
@@ -913,6 +969,17 @@
             },
             "title": "Experiments",
             "type": "array"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
           },
           "invalidations": {
             "items": {
@@ -989,6 +1056,17 @@
           "thread_id": {
             "title": "Thread Id",
             "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
         "required": [
@@ -1005,7 +1083,10 @@
           "invalidations",
           "model_card_md",
           "data_profile",
-          "cost_by_agent"
+          "cost_by_agent",
+          "goal",
+          "dataset_ref",
+          "updated_at"
         ],
         "title": "RunStatus",
         "type": "object"
@@ -1276,6 +1357,28 @@
           }
         },
         "summary": "List Approvals"
+      }
+    },
+    "/datasets": {
+      "get": {
+        "operationId": "list_datasets_datasets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetOption"
+                  },
+                  "title": "Response List Datasets Datasets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Datasets"
       }
     },
     "/eval": {

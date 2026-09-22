@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cn } from "./cn";
-import { formatClock, formatMetric, formatTime, formatUsd, formatUsdPrecise, shortId } from "./format";
+import { formatAge, formatClock, formatMetric, formatTime, formatUsd, formatUsdPrecise, shortId } from "./format";
 import { METER_CRITICAL_AT, METER_PRESSURE_AT, meterTone, spendFraction } from "./meter";
 
 describe("meter", () => {
@@ -61,6 +61,17 @@ describe("format", () => {
   it("pads midnight as 00, not 24 (hourCycle h23)", () => {
     const iso = new Date(2026, 0, 1, 0, 5, 9).toISOString();
     expect(formatTime(iso)).toBe("00:05:09");
+  });
+
+  it("formats a run's age as minutes, hours, or days, relative to a given `now`", () => {
+    const now = Date.parse("2026-01-01T12:00:00.000Z");
+    expect(formatAge(null, now)).toBe("—");
+    expect(formatAge("2026-01-01T11:59:40.000Z", now)).toBe("just now");
+    expect(formatAge("2026-01-01T11:55:00.000Z", now)).toBe("5m");
+    expect(formatAge("2026-01-01T09:00:00.000Z", now)).toBe("3h");
+    expect(formatAge("2025-12-29T12:00:00.000Z", now)).toBe("3d");
+    // a timestamp AHEAD of `now` (clock skew) never reads as a negative age
+    expect(formatAge("2026-01-01T12:05:00.000Z", now)).toBe("just now");
   });
 });
 

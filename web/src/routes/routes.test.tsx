@@ -9,7 +9,7 @@ import { createApiClient } from "../api/client";
 import { createQueryClient } from "../api/queryClient";
 import { demoReplayText } from "../test/demoReplay";
 import { fakeApi, TEST_BASE_URL, type FakeRoutes } from "../test/fakeApi";
-import { makeEvent, makeRunStatus } from "../test/fixtures";
+import { makeDatasetOption, makeEvent, makeRunStatus, makeTaskResult } from "../test/fixtures";
 import { sseBody, sseText } from "../test/sseBody";
 
 /** The console's whole vertical slice in jsdom: routes, providers, the replay player against the
@@ -53,6 +53,10 @@ afterEach(() => {
 
 const feed = () => screen.findByRole("list", { name: "Activity feed" }, { timeout: 4000 });
 const slow = { timeout: 5000 } as const;
+
+/** Every "runs home" test renders StartRunPanel, which calls useDatasets() on mount — routed
+ * here so a test that omits it doesn't fall through to fakeApi's 500-and-retry path. */
+const withDatasets: FakeRoutes = { "GET /datasets": () => ({ json: [makeDatasetOption()] }) };
 
 /** GateDialog.tsx's 400ms arm: Approve is disabled until it fills. Polls for real — this suite
  * uses real timers throughout, not fake ones. */
@@ -205,6 +209,7 @@ describe("a live run", () => {
 describe("runs home", () => {
   it("always offers the demo recording, even with the API down", async () => {
     renderAt("/runs", {
+      ...withDatasets,
       "GET /runs": () => {
         throw new TypeError("Failed to fetch");
       },
@@ -222,30 +227,62 @@ describe("runs home", () => {
     // With `make web` and no API, Vite's dev proxy answers 502 with no FastAPI body. This is what
     // the operator really sees, and a screenshot showed it rendering just "Bad Gateway". A 5xx is
     // retried twice with backoff first (about 3s), so the error state takes a moment to appear.
-    renderAt("/runs", { "GET /runs": () => ({ status: 502, body: "Bad Gateway" }) });
+    renderAt("/runs", { ...withDatasets, "GET /runs": () => ({ status: 502, body: "Bad Gateway" }) });
     const alert = await screen.findByRole("alert", {}, { timeout: 8000 });
     expect(alert).toHaveTextContent("Could not list runs");
     expect(alert).toHaveTextContent("make api");
   });
 
   it("tells the operator what to do next when there are no runs", async () => {
-    renderAt("/runs", { "GET /runs": () => ({ json: [] }) });
+    renderAt("/runs", { ...withDatasets, "GET /runs": () => ({ json: [] }) });
     expect(await screen.findByText("No runs yet")).toBeInTheDocument();
-    expect(screen.getByText(/Start one with POST \/runs/)).toBeInTheDocument();
+    expect(screen.getByText(/Pick a dataset above/)).toBeInTheDocument();
   });
 
-  it("lists live runs with their status and spend", async () => {
+  it("lists live runs with their status, dataset, goal and spend", async () => {
     renderAt("/runs", {
+      ...withDatasets,
       "GET /runs": () => ({
-        json: [makeRunStatus({ thread_id: "5c255737-39db", status: "completed", spent_usd: 12.84 })],
+        json: [
+          makeRunStatus({
+            thread_id: "5c255737-39db",
+            status: "completed",
+            spent_usd: 12.84,
+            dataset_ref: "churn",
+            goal: "predict churn",
+          }),
+        ],
       }),
     });
-    expect(await screen.findByRole("link", { name: "5c25…db" })).toHaveAttribute("href", "/runs/5c255737-39db");
+    expect(await screen.findByRole("link", { name: "predict churn" })).toHaveAttribute(
+      "href",
+      "/runs/5c255737-39db",
+    );
+    expect(screen.getByRole("cell", { name: "churn" })).toBeInTheDocument();
     expect(screen.getByText("$12.84")).toBeInTheDocument();
   });
 
+  it("the start-a-run panel posts the form and lands on the new run", async () => {
+    const user = userEvent.setup();
+    renderAt("/runs", {
+      ...withDatasets,
+      "GET /runs": () => ({ json: [] }),
+      "POST /runs": () => ({ status: 202, json: { thread_id: "t-9", status: "running" } }),
+      "GET /runs/t-9/events": () => ({ body: sseBody("") }),
+      "GET /runs/t-9": () => ({ json: makeRunStatus({ thread_id: "t-9" }) }),
+    });
+    await screen.findByText("No runs yet");
+
+    await user.type(screen.getByLabelText("goal"), "predict widget failure");
+    await user.click(screen.getByRole("button", { name: "Start run" }));
+
+    // navigated off "runs" home and onto the new run's own view (RunView.tsx's own h1)
+    await waitFor(() => expect(screen.getByRole("heading", { name: "activity" })).toBeInTheDocument(), slow);
+    expect(screen.queryByRole("heading", { name: "runs" })).not.toBeInTheDocument();
+  });
+
   it("redirects / to /runs", () => {
-    renderAt("/", { "GET /runs": () => ({ json: [] }) });
+    renderAt("/", { ...withDatasets, "GET /runs": () => ({ json: [] }) });
     expect(screen.getByRole("heading", { name: "runs" })).toBeInTheDocument();
   });
 });
@@ -260,17 +297,48 @@ describe("other screens", () => {
     expect(alert).not.toHaveTextContent("make api"); // the API answered; it is not down
   });
 
+  it("renders the per-task table and the ablations once results exist", async () => {
+    renderAt("/eval", {
+      "GET /eval": () => ({
+        json: [
+          makeTaskResult({ dataset_ref: "churn", config: "full", primary_metric_value: 0.85 }),
+          makeTaskResult({ dataset_ref: "churn", config: "no_red_team", primary_metric_value: 0.99 }),
+          makeTaskResult({
+            dataset_ref: "churn", config: "memory_run_2", first_model_family: "lightgbm",
+          }),
+          makeTaskResult({ dataset_ref: "churn", config: "monolith", primary_metric_value: 0.79 }),
+          makeTaskResult({ dataset_ref: "churn", config: "uniform_model" }),
+        ],
+      }),
+    });
+    expect(await screen.findByRole("cell", { name: "churn" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ablation: red team on/off" })).toBeInTheDocument();
+    expect(screen.getByText("differs")).toBeInTheDocument(); // memory ablation: full plans logistic_regression, run 2 plans lightgbm
+    expect(screen.getByRole("heading", { name: "ablation: model split vs. uniform" })).toBeInTheDocument();
+  });
+
   it("says a run has no report yet, and offers the way back to it", async () => {
     renderAt("/runs/t-1/report", { "GET /runs/t-1": () => ({ json: makeRunStatus() }) });
     expect(await screen.findByText("No report yet")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the run" })).toHaveAttribute("href", "/runs/t-1");
   });
 
-  it("shows a report once there is one", async () => {
+  it("shows a report once there is one, with its TOC, hero metric and model card", async () => {
     renderAt("/runs/t-1/report", {
-      "GET /runs/t-1": () => ({ json: makeRunStatus({ report_md: "# Report\n\nbest roc_auc 0.85" }) }),
+      "GET /runs/t-1": () => ({
+        json: makeRunStatus({
+          report_md: "# Report\n\n## Summary\n\nbest roc_auc 0.85",
+          model_card_md: "# Model Card\n\n## Notes\n\nships it",
+          leaderboard: [
+            { experiment_id: "exp-004", mlflow_run_id: null, primary_metric_name: "roc_auc", primary_metric_value: 0.8814, rank: 1 },
+          ],
+        }),
+      }),
     });
     expect(await screen.findByText(/best roc_auc 0.85/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Summary" })).toHaveAttribute("href", "#summary");
+    expect(screen.getByText("0.8814")).toBeInTheDocument(); // the hero metric
+    expect(screen.getByText("ships it")).toBeInTheDocument(); // the model card, below the report
   });
 
   it("has a not-found screen that leads somewhere", () => {
