@@ -15,17 +15,21 @@ separate switch to keep in sync.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractContextManager, asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.sse import EventSourceResponse
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.store.base import BaseStore
 from langgraph.store.postgres import PostgresStore
+from pydantic import ValidationError
 
+from app.events import ActivityEvent
+from app.replay import JsonlRecorder, Replay, ReplaySummary, list_replays, load_replay
 from app.runs import RunManager
 from app.schemas import (
     PendingApproval,
@@ -36,7 +40,9 @@ from app.schemas import (
 )
 from foundry.config import settings
 from foundry.datasets import get_dataset
+from foundry.eval.harness import TaskResult
 from foundry.graph import build_graph
+from foundry.models import ExperimentResult
 from foundry.stubs import install_canned_responses
 
 CheckpointerFactory = Callable[[], AbstractContextManager[BaseCheckpointSaver]]
@@ -65,13 +71,25 @@ def create_app(
             if isinstance(store, PostgresStore):
                 store.setup()
             graph = build_graph(checkpointer, store)
-            app.state.run_manager = RunManager(graph)
+            recorder = (
+                JsonlRecorder(settings.replay_record_dir)
+                if settings.replay_recording_enabled
+                else None
+            )
+            app.state.run_manager = RunManager(graph, recorder)
             yield
 
     app = FastAPI(title="foundry", lifespan=lifespan)
 
     def manager() -> RunManager:
         return app.state.run_manager
+
+    def require_thread(thread_id: str) -> None:
+        # A dependency, not a check inside stream_events: a generator endpoint's body does not
+        # run until iteration starts, which is after the 200 status line has been sent — a raise
+        # there could no longer become a 404. Dependencies resolve before the endpoint is called.
+        if not manager().exists(thread_id):
+            raise HTTPException(404, f"unknown thread_id {thread_id!r}")
 
     @app.post("/runs", status_code=202)
     def start_run(request: StartRunRequest) -> StartRunResponse:
@@ -97,16 +115,23 @@ def create_app(
         except KeyError:
             raise HTTPException(404, f"unknown thread_id {thread_id!r}") from None
 
-    @app.get("/runs/{thread_id}/events")
-    def stream_events(thread_id: str) -> StreamingResponse:
-        if thread_id not in manager().thread_ids():
-            raise HTTPException(404, f"unknown thread_id {thread_id!r}")
+    @app.get(
+        "/runs/{thread_id}/events",
+        response_class=EventSourceResponse,
+        dependencies=[Depends(require_thread)],
+    )
+    def stream_events(thread_id: str) -> Iterator[ActivityEvent]:
+        # FastAPI's native SSE support is what puts ActivityEvent into the OpenAPI schema (a
+        # StreamingResponse return annotation documents nothing), so the console's event type is
+        # generated, never hand-written. It also emits keepalive comments during quiet stretches.
+        yield from manager().stream(thread_id)
 
-        def _sse() -> Iterator[str]:
-            for event in manager().stream(thread_id):
-                yield f"data: {event.model_dump_json()}\n\n"
-
-        return StreamingResponse(_sse(), media_type="text/event-stream")
+    @app.get("/runs/{thread_id}/experiments")
+    def get_experiments(thread_id: str) -> list[ExperimentResult]:
+        try:
+            return manager().status(thread_id).experiments
+        except KeyError:
+            raise HTTPException(404, f"unknown thread_id {thread_id!r}") from None
 
     @app.get("/approvals")
     def list_approvals() -> list[PendingApproval]:
@@ -125,6 +150,29 @@ def create_app(
             )
         manager().resume(thread_id, {"approved": request.approved, "note": request.note})
         return StartRunResponse(thread_id=thread_id, status="running")
+
+    @app.get("/eval")
+    def get_eval_results() -> list[TaskResult]:
+        path = settings.artifacts_dir / "eval" / "results.json"
+        if not path.is_file():
+            raise HTTPException(404, "no eval results yet; run `make eval`")
+        try:
+            return [TaskResult.model_validate(row) for row in json.loads(path.read_text("utf-8"))]
+        except (ValueError, ValidationError) as exc:
+            raise HTTPException(
+                500, f"{path} is unreadable ({exc.__class__.__name__}); rerun `make eval`"
+            ) from None
+
+    @app.get("/replays")
+    def get_replays() -> list[ReplaySummary]:
+        return list_replays()
+
+    @app.get("/replays/{name}")
+    def get_replay(name: str) -> Replay:
+        try:
+            return load_replay(name)
+        except (ValueError, FileNotFoundError):
+            raise HTTPException(404, f"unknown replay {name!r}") from None
 
     return app
 

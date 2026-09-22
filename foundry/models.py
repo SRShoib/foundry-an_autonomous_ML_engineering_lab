@@ -21,14 +21,22 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from foundry.config import settings
+
+# M9b: the API serializes every field of a response model, defaults included, so the OpenAPI schema
+# for a model it RETURNS must mark them required — otherwise the operator console's generated
+# TypeScript types call always-present fields optional and every component guards against an
+# `undefined` that cannot happen. Applied only to models the API returns: a request body's
+# defaults genuinely are optional, and validation-mode schemas (LLM structured output) are
+# unaffected. tests/test_openapi.py asserts no response schema is left with optional fields.
+WIRE_CONFIG = ConfigDict(json_schema_serialization_defaults_required=True)
+
 
 # --------------------------------------------------------------------------------------------
 # LLM-authored
 # --------------------------------------------------------------------------------------------
-
 
 class LeakageFinding(BaseModel):
     column: str
@@ -178,6 +186,9 @@ class RedTeamFinding(BaseModel):
     experiment_id it was rendered against — the unit foundry/state.py's `invalidations`
     add-reducer accumulates, and what foundry/leaderboard.py filters leaderboard candidates by."""
 
+    model_config = WIRE_CONFIG
+
+
     experiment_id: str
     category: RedTeamCategory
     verdict: Literal["valid", "invalidated"]
@@ -195,6 +206,9 @@ class ColumnProfile(BaseModel):
     ProfileAssessment (which columns are potential leaks) — never returned directly by
     llm.structured(), so it is never registered in StubClient's schema registry."""
 
+    model_config = WIRE_CONFIG
+
+
     name: str
     dtype: str
     n_missing: int
@@ -204,6 +218,7 @@ class ColumnProfile(BaseModel):
 
 
 class DataProfile(BaseModel):
+    model_config = WIRE_CONFIG
     n_rows: int
     n_cols: int
     target_column: str
@@ -229,6 +244,7 @@ class SandboxResult(BaseModel):
 
 
 class ExperimentResult(BaseModel):
+    model_config = WIRE_CONFIG
     experiment_id: str
     mlflow_run_id: str | None = None
     status: Literal["success", "failed"]
@@ -237,9 +253,17 @@ class ExperimentResult(BaseModel):
     duration_s: float
     attempts: int = 1  # self-debug attempts consumed (SPEC: "runner self-debug max k=3")
     error: str | None = None
+    # M9b: what the operator console's experiment drawer shows. The LAST attempt's script and its
+    # tail-truncated sandbox output (foundry/config.py's experiment_output_chars). All three
+    # default to "" because ExperimentResult is msgpack-allowlisted (foundry/graph.py): a
+    # checkpoint written before these fields existed must still deserialize.
+    code: str = ""
+    stdout: str = ""
+    stderr: str = ""
 
 
 class LeaderboardEntry(BaseModel):
+    model_config = WIRE_CONFIG
     experiment_id: str
     mlflow_run_id: str | None
     primary_metric_name: str

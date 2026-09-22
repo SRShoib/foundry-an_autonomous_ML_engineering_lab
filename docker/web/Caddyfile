@@ -1,0 +1,32 @@
+# Serves the built operator console and proxies /api to the foundry API.
+#
+# The API is NOT a compose service: it launches sandbox containers, so it must reach the HOST's
+# Docker daemon, and giving a container the Docker socket is a larger hole than this console is
+# worth. `make api` therefore runs on the host, and this container reaches it at
+# host.docker.internal (compose maps that via `extra_hosts: host-gateway`).
+:8080 {
+	root * /srv
+
+	# handle_path STRIPS the /api prefix, because the FastAPI app registers its routes at the root
+	# (/runs, /approvals). web/vite.config.ts does the same with `rewrite` in dev — if these two
+	# ever disagree, every request 404s in exactly one of the dev and built environments.
+	handle_path /api/* {
+		# flush_interval -1: the run's activity stream is Server-Sent Events and must reach the
+		# browser event by event, not in buffered chunks. `encode` is deliberately NOT applied here:
+		# compressing an event stream buffers it.
+		reverse_proxy {$FOUNDRY_API_UPSTREAM:host.docker.internal:8000} {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		encode zstd gzip
+		# Single-page app: any path that is not a real file (a /runs/... deep link) gets index.html.
+		# /replays/*.jsonl ARE real files, so recorded runs load with the API stopped.
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Vite fingerprints everything under /assets, so it can be cached forever.
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+}

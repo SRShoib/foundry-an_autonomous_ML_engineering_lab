@@ -9,7 +9,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from foundry.models import LeaderboardEntry
+from foundry.models import (
+    WIRE_CONFIG,
+    DataProfile,
+    ExperimentResult,
+    LeaderboardEntry,
+    RedTeamFinding,
+)
 
 RunStatusKind = Literal["running", "awaiting_approval", "completed", "failed"]
 
@@ -21,6 +27,7 @@ class StartRunRequest(BaseModel):
 
 
 class StartRunResponse(BaseModel):
+    model_config = WIRE_CONFIG
     thread_id: str
     status: RunStatusKind
 
@@ -31,6 +38,7 @@ class ResumeRequest(BaseModel):
 
 
 class PendingApproval(BaseModel):
+    model_config = WIRE_CONFIG
     thread_id: str
     gate: Literal["budget", "final"]
     reason: str
@@ -44,6 +52,7 @@ class PendingApproval(BaseModel):
 
 
 class RunStatus(BaseModel):
+    model_config = WIRE_CONFIG
     thread_id: str
     status: RunStatusKind
     stop_reason: str | None = None
@@ -53,3 +62,12 @@ class RunStatus(BaseModel):
     pending_approval: PendingApproval | None = None
     report_md: str | None = None
     error: str | None = None
+    # M9b — what the operator console renders beyond the leaderboard.
+    experiments: list[ExperimentResult] = Field(default_factory=list)
+    # The FULL audit trail: FoundryState.invalidations holds a `valid` verdict for every audited
+    # experiment too, not only the invalidated ones. Consumers must filter on
+    # verdict == "invalidated" to count or flag invalidations (PendingApproval.n_invalidated does).
+    invalidations: list[RedTeamFinding] = Field(default_factory=list)
+    model_card_md: str | None = None
+    data_profile: DataProfile | None = None
+    cost_by_agent: dict[str, float] = Field(default_factory=dict)
