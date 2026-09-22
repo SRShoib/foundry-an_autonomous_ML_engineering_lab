@@ -1,0 +1,1397 @@
+{
+  "components": {
+    "schemas": {
+      "ActivityEvent": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "node",
+              "interrupt",
+              "done",
+              "error"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "spent_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spent Usd"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "seq",
+          "ts",
+          "kind",
+          "node",
+          "summary",
+          "spent_usd"
+        ],
+        "title": "ActivityEvent",
+        "type": "object"
+      },
+      "ColumnProfile": {
+        "description": "Assembled by foundry/teams/data_team.py from RawColumnStats (measured) plus the LLM's\nProfileAssessment (which columns are potential leaks) \u2014 never returned directly by\nllm.structured(), so it is never registered in StubClient's schema registry.",
+        "properties": {
+          "dtype": {
+            "title": "Dtype",
+            "type": "string"
+          },
+          "is_potential_leak": {
+            "default": false,
+            "title": "Is Potential Leak",
+            "type": "boolean"
+          },
+          "n_missing": {
+            "title": "N Missing",
+            "type": "integer"
+          },
+          "n_unique": {
+            "title": "N Unique",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pct_missing": {
+            "title": "Pct Missing",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "dtype",
+          "n_missing",
+          "pct_missing",
+          "n_unique",
+          "is_potential_leak"
+        ],
+        "title": "ColumnProfile",
+        "type": "object"
+      },
+      "DataProfile": {
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnProfile"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "n_cols": {
+            "title": "N Cols",
+            "type": "integer"
+          },
+          "n_rows": {
+            "title": "N Rows",
+            "type": "integer"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "target_column": {
+            "title": "Target Column",
+            "type": "string"
+          },
+          "task_type": {
+            "enum": [
+              "binary_classification",
+              "multiclass_classification",
+              "regression"
+            ],
+            "title": "Task Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n_rows",
+          "n_cols",
+          "target_column",
+          "task_type",
+          "columns",
+          "notes"
+        ],
+        "title": "DataProfile",
+        "type": "object"
+      },
+      "ExperimentResult": {
+        "properties": {
+          "attempts": {
+            "default": 1,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "duration_s": {
+            "title": "Duration S",
+            "type": "number"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "mlflow_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mlflow Run Id"
+          },
+          "status": {
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stderr": {
+            "default": "",
+            "title": "Stderr",
+            "type": "string"
+          },
+          "stdout": {
+            "default": "",
+            "title": "Stdout",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "mlflow_run_id",
+          "status",
+          "metrics",
+          "cost_usd",
+          "duration_s",
+          "attempts",
+          "error",
+          "code",
+          "stdout",
+          "stderr"
+        ],
+        "title": "ExperimentResult",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LeaderboardEntry": {
+        "properties": {
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "mlflow_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mlflow Run Id"
+          },
+          "primary_metric_name": {
+            "title": "Primary Metric Name",
+            "type": "string"
+          },
+          "primary_metric_value": {
+            "title": "Primary Metric Value",
+            "type": "number"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "mlflow_run_id",
+          "primary_metric_name",
+          "primary_metric_value",
+          "rank"
+        ],
+        "title": "LeaderboardEntry",
+        "type": "object"
+      },
+      "PendingApproval": {
+        "properties": {
+          "best_experiment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Experiment Id"
+          },
+          "best_metric_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Metric Name"
+          },
+          "best_metric_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Metric Value"
+          },
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "gate": {
+            "enum": [
+              "budget",
+              "final"
+            ],
+            "title": "Gate",
+            "type": "string"
+          },
+          "n_invalidated": {
+            "default": 0,
+            "title": "N Invalidated",
+            "type": "integer"
+          },
+          "projected_usd": {
+            "default": 0.0,
+            "title": "Projected Usd",
+            "type": "number"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "number"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "gate",
+          "reason",
+          "spent_usd",
+          "budget_usd",
+          "projected_usd",
+          "best_experiment_id",
+          "best_metric_name",
+          "best_metric_value",
+          "n_invalidated"
+        ],
+        "title": "PendingApproval",
+        "type": "object"
+      },
+      "RedTeamFinding": {
+        "description": "Code-assembled record (foundry/teams/red_team.py) of one RedTeamVerdict plus the\nexperiment_id it was rendered against \u2014 the unit foundry/state.py's `invalidations`\nadd-reducer accumulates, and what foundry/leaderboard.py filters leaderboard candidates by.",
+        "properties": {
+          "category": {
+            "enum": [
+              "leakage",
+              "contamination",
+              "improper_cv",
+              "validation_overfitting",
+              "seed_hacking"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "recommendation": {
+            "title": "Recommendation",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "valid",
+              "invalidated"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "category",
+          "verdict",
+          "explanation",
+          "recommendation"
+        ],
+        "title": "RedTeamFinding",
+        "type": "object"
+      },
+      "Replay": {
+        "properties": {
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayFrame"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "header": {
+            "$ref": "#/components/schemas/ReplayHeader"
+          }
+        },
+        "required": [
+          "header",
+          "frames"
+        ],
+        "title": "Replay",
+        "type": "object"
+      },
+      "ReplayDecision": {
+        "description": "What the operator did at a gate while the recording was made.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "gate": {
+            "enum": [
+              "budget",
+              "final"
+            ],
+            "title": "Gate",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "t_offset_s": {
+            "title": "T Offset S",
+            "type": "number"
+          },
+          "wait_s": {
+            "title": "Wait S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "gate",
+          "approved",
+          "note",
+          "t_offset_s",
+          "wait_s"
+        ],
+        "title": "ReplayDecision",
+        "type": "object"
+      },
+      "ReplayFrame": {
+        "description": "`status` is carry-forward ENCODED \u2014 it is not a standalone RunStatus. Read it only through\nfold_frames() here or foldFrames() in web/src/replay/fold.ts.",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/ActivityEvent"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "t_offset_s": {
+            "title": "T Offset S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "t_offset_s",
+          "event",
+          "status"
+        ],
+        "title": "ReplayFrame",
+        "type": "object"
+      },
+      "ReplayHeader": {
+        "properties": {
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayDecision"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "duration_s": {
+            "default": 0.0,
+            "title": "Duration S",
+            "type": "number"
+          },
+          "final_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gate_wait_s": {
+            "default": 0.0,
+            "title": "Gate Wait S",
+            "type": "number"
+          },
+          "goal": {
+            "title": "Goal",
+            "type": "string"
+          },
+          "n_frames": {
+            "default": 0,
+            "title": "N Frames",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "name",
+          "thread_id",
+          "task",
+          "goal",
+          "budget_usd",
+          "recorded_at",
+          "duration_s",
+          "gate_wait_s",
+          "n_frames",
+          "decisions",
+          "final_status"
+        ],
+        "title": "ReplayHeader",
+        "type": "object"
+      },
+      "ReplaySummary": {
+        "properties": {
+          "committed": {
+            "description": "a shipped demo (replay_demo_dir), not a local recording",
+            "title": "Committed",
+            "type": "boolean"
+          },
+          "duration_s": {
+            "title": "Duration S",
+            "type": "number"
+          },
+          "goal": {
+            "title": "Goal",
+            "type": "string"
+          },
+          "n_frames": {
+            "title": "N Frames",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "thread_id",
+          "task",
+          "goal",
+          "recorded_at",
+          "duration_s",
+          "n_frames",
+          "committed"
+        ],
+        "title": "ReplaySummary",
+        "type": "object"
+      },
+      "ResumeRequest": {
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "title": "ResumeRequest",
+        "type": "object"
+      },
+      "RunStatus": {
+        "properties": {
+          "budget_usd": {
+            "default": 0.0,
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "cost_by_agent": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Cost By Agent",
+            "type": "object"
+          },
+          "data_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "experiments": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentResult"
+            },
+            "title": "Experiments",
+            "type": "array"
+          },
+          "invalidations": {
+            "items": {
+              "$ref": "#/components/schemas/RedTeamFinding"
+            },
+            "title": "Invalidations",
+            "type": "array"
+          },
+          "leaderboard": {
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            },
+            "title": "Leaderboard",
+            "type": "array"
+          },
+          "model_card_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Card Md"
+          },
+          "pending_approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingApproval"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "report_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Md"
+          },
+          "spent_usd": {
+            "default": 0.0,
+            "title": "Spent Usd",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "status",
+          "stop_reason",
+          "spent_usd",
+          "budget_usd",
+          "leaderboard",
+          "pending_approval",
+          "report_md",
+          "error",
+          "experiments",
+          "invalidations",
+          "model_card_md",
+          "data_profile",
+          "cost_by_agent"
+        ],
+        "title": "RunStatus",
+        "type": "object"
+      },
+      "StartRunRequest": {
+        "properties": {
+          "budget_usd": {
+            "default": 20.0,
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "task": {
+            "description": "bundled dataset registry key, e.g. 'churn'",
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "StartRunRequest",
+        "type": "object"
+      },
+      "StartRunResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "status"
+        ],
+        "title": "StartRunResponse",
+        "type": "object"
+      },
+      "TaskResult": {
+        "properties": {
+          "approach": {
+            "title": "Approach",
+            "type": "string"
+          },
+          "calls_by_agent": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Calls By Agent",
+            "type": "object"
+          },
+          "config": {
+            "title": "Config",
+            "type": "string"
+          },
+          "cost_by_agent": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Cost By Agent",
+            "type": "object"
+          },
+          "cost_total_usd": {
+            "title": "Cost Total Usd",
+            "type": "number"
+          },
+          "dataset_ref": {
+            "title": "Dataset Ref",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "first_model_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Model Family"
+          },
+          "n_experiments": {
+            "title": "N Experiments",
+            "type": "integer"
+          },
+          "n_invalidated": {
+            "title": "N Invalidated",
+            "type": "integer"
+          },
+          "n_successful": {
+            "title": "N Successful",
+            "type": "integer"
+          },
+          "primary_metric_name": {
+            "title": "Primary Metric Name",
+            "type": "string"
+          },
+          "primary_metric_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Metric Value"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
+          },
+          "target_met": {
+            "title": "Target Met",
+            "type": "boolean"
+          },
+          "target_value": {
+            "title": "Target Value",
+            "type": "number"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "wall_time_s": {
+            "title": "Wall Time S",
+            "type": "number"
+          },
+          "winning_model_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winning Model Family"
+          }
+        },
+        "required": [
+          "dataset_ref",
+          "config",
+          "approach",
+          "thread_id",
+          "stop_reason",
+          "primary_metric_name",
+          "primary_metric_value",
+          "target_value",
+          "target_met",
+          "n_experiments",
+          "n_successful",
+          "n_invalidated",
+          "cost_total_usd",
+          "cost_by_agent",
+          "calls_by_agent",
+          "wall_time_s",
+          "winning_model_family",
+          "first_model_family",
+          "error"
+        ],
+        "title": "TaskResult",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "foundry",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/approvals": {
+      "get": {
+        "operationId": "list_approvals_approvals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PendingApproval"
+                  },
+                  "title": "Response List Approvals Approvals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Approvals"
+      }
+    },
+    "/eval": {
+      "get": {
+        "operationId": "get_eval_results_eval_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskResult"
+                  },
+                  "title": "Response Get Eval Results Eval Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Eval Results"
+      }
+    },
+    "/replays": {
+      "get": {
+        "operationId": "get_replays_replays_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReplaySummary"
+                  },
+                  "title": "Response Get Replays Replays Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Replays"
+      }
+    },
+    "/replays/{name}": {
+      "get": {
+        "operationId": "get_replay_replays__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Replay"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Replay"
+      }
+    },
+    "/runs": {
+      "get": {
+        "operationId": "list_runs_runs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunStatus"
+                  },
+                  "title": "Response List Runs Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Runs"
+      },
+      "post": {
+        "operationId": "start_run_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Run"
+      }
+    },
+    "/runs/{thread_id}": {
+      "get": {
+        "operationId": "get_run_runs__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run"
+      }
+    },
+    "/runs/{thread_id}/events": {
+      "get": {
+        "operationId": "stream_events_runs__thread_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "properties": {
+                    "data": {
+                      "contentMediaType": "application/json",
+                      "contentSchema": {
+                        "$ref": "#/components/schemas/ActivityEvent"
+                      },
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Events"
+      }
+    },
+    "/runs/{thread_id}/experiments": {
+      "get": {
+        "operationId": "get_experiments_runs__thread_id__experiments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExperimentResult"
+                  },
+                  "title": "Response Get Experiments Runs  Thread Id  Experiments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Experiments"
+      }
+    },
+    "/runs/{thread_id}/resume": {
+      "post": {
+        "operationId": "resume_run_runs__thread_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Run"
+      }
+    }
+  }
+}

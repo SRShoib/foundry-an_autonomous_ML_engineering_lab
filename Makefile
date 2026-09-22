@@ -1,4 +1,4 @@
-.PHONY: up down sandbox-build smoke sample-data run api lint fmt typecheck test eval
+.PHONY: up down sandbox-build smoke sample-data run api lint fmt typecheck test eval web web-install web-build web-check console openapi types record-replay
 
 up:
 	docker compose up -d --build --wait
@@ -35,3 +35,27 @@ test:
 
 eval:
 	uv run python -m foundry.eval
+
+web-install:
+	cd web && npm ci
+
+web:
+	cd web && npm run dev
+
+web-build:
+	cd web && npm run build
+
+web-check:
+	cd web && npm run typecheck && npx vitest run
+
+console:
+	docker compose --profile console up -d --build --wait web
+
+openapi:
+	uv run python scripts/dump_openapi.py
+
+types:
+	cd web && npm run types
+
+record-replay:
+	uv run python scripts/record_replay.py

@@ -7,16 +7,24 @@ or a background thread — app/runs.py's RunManager is the only caller."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel
+
+from foundry.models import WIRE_CONFIG
 
 EventKind = Literal["node", "interrupt", "done", "error"]
 
 
 class ActivityEvent(BaseModel):
+    model_config = WIRE_CONFIG
     thread_id: str
     seq: int
+    # Stamped server-side when the event is appended (app/runs.py RunHandle.append). Never
+    # client-side: every GET /events replays history from seq 0, so a browser that stamped on
+    # arrival would label a run's whole history with the moment the page loaded.
+    ts: datetime
     kind: EventKind
     node: str | None = None
     summary: str

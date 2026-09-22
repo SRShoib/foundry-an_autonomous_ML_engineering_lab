@@ -13,9 +13,12 @@ churn task completes in milliseconds — full network-of-agents behavior, zero e
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable
 from contextlib import nullcontext
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -24,6 +27,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
 from app.main import create_app
+from app.replay import Replay, fold_frames
+from app.schemas import RunStatus
 from foundry.config import settings
 from foundry.llm import MeteredClient, StubClient
 from foundry.models import SandboxResult
@@ -111,8 +116,12 @@ def _wait_until(
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Any:
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
     _use_stub_everywhere(monkeypatch)
+    # Every run is recorded (app/replay.py): keep test recordings out of the real artifacts/ dir
+    # and out of the committed demo dir, and let tests find them under tmp_path.
+    monkeypatch.setattr(settings, "replay_record_dir", tmp_path / "recorded")
+    monkeypatch.setattr(settings, "replay_demo_dir", tmp_path / "demo")
     test_app = create_app(
         checkpointer_factory=lambda: nullcontext(InMemorySaver()),
         store_factory=lambda: nullcontext(InMemoryStore()),
@@ -167,6 +176,138 @@ def test_full_round_trip_start_pause_at_final_gate_approve_and_complete(
     assert client.get("/approvals").json() == []
     conflict = client.post(f"/runs/{thread_id}/resume", json={"approved": True})
     assert conflict.status_code == 409
+
+
+def _sse_events(text: str) -> list[dict[str, Any]]:
+    """Decode an SSE body, ignoring comment/keepalive lines — only `data:` frames carry events."""
+    prefix = "data: "
+    lines = [line for line in text.splitlines() if line.startswith(prefix)]
+    return [json.loads(line[len(prefix) :]) for line in lines]
+
+
+def _run_to_final_gate(client: TestClient) -> str:
+    thread_id = client.post("/runs", json={"task": "churn", "budget_usd": 20.0}).json()["thread_id"]
+    _wait_until(lambda: client.get(f"/runs/{thread_id}").json()["status"] != "running")
+    return thread_id
+
+
+def test_run_status_exposes_experiments_audit_trail_profile_card_and_cost(
+    client: TestClient,
+) -> None:
+    status = client.get(f"/runs/{_run_to_final_gate(client)}").json()
+
+    assert status["experiments"], "the operator console's experiment drawer needs these"
+    assert all(experiment["code"] for experiment in status["experiments"])
+    assert status["data_profile"]["target_column"] == "churned"
+    assert status["model_card_md"]
+    assert status["cost_by_agent"]["worker"] > 0
+
+    # invalidations is the FULL audit trail: with a clean audit every verdict is `valid`, yet each
+    # audited experiment still appears — consumers must filter on verdict, not on presence.
+    assert status["invalidations"]
+    assert {finding["verdict"] for finding in status["invalidations"]} == {"valid"}
+
+
+def test_events_carry_a_server_side_non_decreasing_timestamp(client: TestClient) -> None:
+    thread_id = _run_to_final_gate(client)
+
+    events = _sse_events(client.get(f"/runs/{thread_id}/events").text)
+    stamps = [datetime.fromisoformat(event["ts"]) for event in events]
+    assert len(stamps) > 3
+    assert all(stamp.tzinfo is not None for stamp in stamps)
+    assert stamps == sorted(stamps)
+
+
+def test_experiments_route_returns_each_result_with_its_code(client: TestClient) -> None:
+    thread_id = _run_to_final_gate(client)
+
+    experiments = client.get(f"/runs/{thread_id}/experiments").json()
+    assert experiments
+    assert all(row["code"] and row["status"] == "success" for row in experiments)
+    assert client.get("/runs/does-not-exist/experiments").status_code == 404
+
+
+def test_eval_route_returns_the_parsed_results_file(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
+    (tmp_path / "eval").mkdir()
+    row = {
+        "dataset_ref": "churn", "config": "full", "approach": "hierarchical", "thread_id": "t",
+        "stop_reason": "target_met", "primary_metric_name": "roc_auc",
+        "primary_metric_value": 0.91, "target_value": 0.9, "target_met": True,
+        "n_experiments": 3, "n_successful": 3, "n_invalidated": 0, "cost_total_usd": 0.18,
+        "wall_time_s": 12.5,
+    }
+    (tmp_path / "eval" / "results.json").write_text(json.dumps([row]), encoding="utf-8")
+
+    response = client.get("/eval")
+    assert response.status_code == 200
+    assert response.json()[0]["primary_metric_value"] == 0.91
+
+
+def test_eval_route_names_the_fix_when_nothing_has_been_run(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
+    response = client.get("/eval")
+    assert response.status_code == 404
+    assert "make eval" in response.json()["detail"]
+
+
+def test_a_corrupt_eval_file_is_a_500_that_names_the_fix(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "results.json").write_text("[{\"nope\": 1}]", encoding="utf-8")
+    response = client.get("/eval")
+    assert response.status_code == 500
+    assert "make eval" in response.json()["detail"]
+
+
+def test_a_completed_run_is_recorded_and_served_from_replays(client: TestClient) -> None:
+    """The whole recording path end to end: record while the graph really runs on its background
+    thread, then serve it back and prove the carry-forward fold reproduces what GET /runs/{id}
+    reports — including the operator's approval at the gate."""
+    thread_id = _run_to_final_gate(client)
+    client.post(f"/runs/{thread_id}/resume", json={"approved": True, "note": "ship it"})
+    _wait_until(lambda: client.get(f"/runs/{thread_id}").json()["status"] == "completed")
+    _wait_until(lambda: any(r["thread_id"] == thread_id for r in client.get("/replays").json()))
+    # close() rewrites the file only once the run has finished; wait for the closed form
+    _wait_until(lambda: client.get(f"/replays/{thread_id}").json()["header"]["final_status"])
+
+    (summary,) = [r for r in client.get("/replays").json() if r["thread_id"] == thread_id]
+    assert summary["committed"] is False
+    assert summary["task"] == "churn"
+
+    replay = Replay.model_validate(client.get(f"/replays/{thread_id}").json())
+    folded = fold_frames(replay.frames)
+    live = RunStatus.model_validate(client.get(f"/runs/{thread_id}").json())
+    assert folded[-1] == replay.header.final_status == live
+
+    (first_gate, *_) = replay.header.decisions
+    assert (first_gate.gate, first_gate.approved, first_gate.note) == ("final", True, "ship it")
+    assert [frame.event.seq for frame in replay.frames] == list(range(len(replay.frames)))
+
+    # the frame for the event that PRODUCED the report already carries it: statuses are paired
+    # with post-step checkpoints, not read one step stale at the moment the event arrives
+    reporter_frame = next(
+        status for frame, status in zip(replay.frames, folded, strict=True)
+        if frame.event.node == "reporter"
+    )
+    assert reporter_frame.report_md
+    data_team_frame = next(
+        status for frame, status in zip(replay.frames, folded, strict=True)
+        if frame.event.node == "data_team"
+    )
+    assert data_team_frame.data_profile is not None
+
+
+def test_replay_routes_404_for_unknown_and_malformed_names(client: TestClient) -> None:
+    assert client.get("/replays/never-recorded").status_code == 404
+    assert client.get("/replays/.hidden").status_code == 404
+    assert client.get("/replays").json() == []
 
 
 def test_list_runs_reflects_known_threads(client: TestClient) -> None:

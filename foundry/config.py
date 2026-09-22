@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     # self-debug max k=3"
     self_debug_max_attempts: int = 3
     self_debug_error_chars: int = 4000
+    # M9b: cap on the sandbox stdout/stderr kept on each ExperimentResult (tail-truncated, so the
+    # traceback or final metrics line survives) — checkpointed state must stay small.
+    experiment_output_chars: int = 4000
     # sandbox_timeout_seconds=60 is tuned for M2's isolation tests, not for import + CV fitting.
     experiment_timeout_seconds: int = 300
     profile_timeout_seconds: int = 120
@@ -132,6 +135,20 @@ class Settings(BaseSettings):
     # pending approvals, resume)".
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    # M9b: GET /runs lists checkpointed threads from before this process started, not only its own
+    # in-memory handles. One run writes many checkpoints, so a checkpoint scan limit is NOT a run
+    # limit — both bounds are needed, and each listed run costs a get_state round trip.
+    api_max_runs: int = 25
+    api_checkpoint_scan_limit: int = 2000
+
+    # M9b run recording (app/replay.py). Every live run is recorded to replay_record_dir (under the
+    # gitignored artifacts/). replay_demo_dir holds the COMMITTED demo recordings and lives under
+    # web/public/ on purpose: Vite and Caddy serve that directory statically, so the console can
+    # replay with the API stopped (zero API calls), while GET /replays serves the same files to
+    # API clients — one file, two servers, no duplicate copy to drift.
+    replay_recording_enabled: bool = True
+    replay_demo_dir: Path = Path("web/public/replays")
+    replay_record_dir: Path = Path("artifacts/replays")
 
 
 settings = Settings()

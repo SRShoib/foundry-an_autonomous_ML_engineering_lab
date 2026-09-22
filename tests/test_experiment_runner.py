@@ -206,6 +206,75 @@ def test_tracker_failure_is_recorded_as_an_error_but_experiment_still_succeeds(
     assert any("mlflow logging failed" in error for error in _errors(update))
 
 
+def test_result_carries_the_last_attempts_code_and_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The experiment drawer (M9d) shows what actually ran on the attempt that produced the
+    result — not the first attempt, which is the one that failed."""
+    monkeypatch.setattr(runner_module, "get_llm", lambda role: _RecordingLLM())
+    results = [
+        _sandbox_result(exit_code=1, stderr="ValueError: first attempt broke"),
+        _sandbox_result(exit_code=0, stdout='FOUNDRY_METRICS {"roc_auc": 0.9}', stderr="warn"),
+    ]
+    calls: list[str] = []
+
+    def _fake_run(code: str, **kwargs: Any) -> SandboxResult:
+        calls.append(code)
+        return results[len(calls) - 1]
+
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run)
+
+    result = _experiments(runner_module.experiment_runner(_payload()))[0]
+    assert result.code == "# attempt 1"
+    assert result.stdout == 'FOUNDRY_METRICS {"roc_auc": 0.9}'
+    assert result.stderr == "warn"
+
+
+def test_captured_output_is_tail_truncated_to_the_configured_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tail, not head: the traceback's last frame and the FOUNDRY_METRICS line print last."""
+    monkeypatch.setattr(settings, "experiment_output_chars", 50)
+    monkeypatch.setattr(runner_module, "get_llm", lambda role: _RecordingLLM())
+    stdout = "x" * 500 + '\nFOUNDRY_METRICS {"roc_auc": 0.9}'
+
+    def _fake_run(code: str, **kwargs: Any) -> SandboxResult:
+        return _sandbox_result(exit_code=0, stdout=stdout, stderr="e" * 500)
+
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run)
+
+    result = _experiments(runner_module.experiment_runner(_payload()))[0]
+    assert len(result.stdout) == 50
+    assert result.stdout.endswith('FOUNDRY_METRICS {"roc_auc": 0.9}')
+    assert len(result.stderr) == 50
+
+
+def test_failed_experiment_still_carries_code_and_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runner_module, "get_llm", lambda role: _RecordingLLM())
+
+    def _fake_run(code: str, **kwargs: Any) -> SandboxResult:
+        return _sandbox_result(exit_code=1, stdout="loading", stderr="ValueError: broken")
+
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run)
+
+    result = _experiments(runner_module.experiment_runner(_payload()))[0]
+    assert result.status == "failed"
+    assert result.code == f"# attempt {settings.self_debug_max_attempts - 1}"
+    assert result.stdout == "loading"
+    assert result.stderr == "ValueError: broken"
+
+
+def test_zero_self_debug_attempts_still_builds_a_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The output accumulators are hoisted above the loop, so a loop body that never runs leaves
+    empty strings rather than an unbound-name error."""
+    monkeypatch.setattr(settings, "self_debug_max_attempts", 0)
+    monkeypatch.setattr(runner_module, "get_llm", lambda role: _RecordingLLM())
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run_success)
+
+    result = _experiments(runner_module.experiment_runner(_payload()))[0]
+    assert result.status == "failed"
+    assert result.attempts == 0
+    assert (result.code, result.stdout, result.stderr) == ("", "", "")
+
+
 @pytest.mark.docker
 def test_real_offline_run_against_churn_csv(monkeypatch: pytest.MonkeyPatch) -> None:
     from foundry.llm import StubClient
