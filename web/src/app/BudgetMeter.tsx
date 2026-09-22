@@ -87,7 +87,12 @@ export function BudgetMeter({ status, heroLayoutId }: { status: RunStatus | null
           aria-valuemax={cap}
           aria-valuenow={spent}
           aria-valuetext={`${formatUsd(spent)} of ${formatUsd(cap)}`}
-          className="relative h-3 overflow-hidden rounded-control bg-meter-track"
+          // §7: "No pulse, no glow" for this widget is unchanged — the only M9g addition is a
+          // static shadow-raised once spend is critical, elevation earned by state, not a pulse.
+          className={cn(
+            "relative h-3 overflow-hidden rounded-control bg-meter-track transition-shadow duration-(--dur-settle) ease-out",
+            tone === "critical" && "shadow-raised",
+          )}
         >
           <motion.div
             className={cn("absolute inset-y-0 left-0 transition-colors duration-(--dur-settle) ease-out", METER_FILL[tone])}

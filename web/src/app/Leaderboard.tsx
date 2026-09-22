@@ -68,7 +68,7 @@ function RowButton({
       type="button"
       onClick={() => onOpen(experimentId)}
       aria-label={`Open experiment ${experimentId}`}
-      className="flex w-full items-baseline gap-3 text-left"
+      className="-mx-2 flex w-full items-baseline gap-3 rounded-control px-2 text-left transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised"
     >
       {children}
     </button>

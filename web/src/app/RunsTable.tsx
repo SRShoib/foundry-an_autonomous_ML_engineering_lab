@@ -30,13 +30,19 @@ export function RunsTable({ runs }: { runs: readonly RunStatus[] }) {
             const best = run.leaderboard[0];
             const invalidatedCount = invalidatedFindings(run.invalidations).length;
             return (
-              <tr key={run.thread_id} className="border-b border-line-hairline last:border-b-0">
+              <tr
+                key={run.thread_id}
+                className="border-b border-line-hairline transition-colors duration-(--dur-quick) ease-out last:border-b-0 hover:bg-surface-raised"
+              >
                 <td className="py-2 pr-3">
                   <RunStatusPill status={run.status} />
                 </td>
                 <td className="py-2 pr-3 text-fg">{run.dataset_ref ?? "—"}</td>
                 <td className="max-w-64 truncate py-2 pr-3" title={run.goal ?? undefined}>
-                  <Link to={links.run(run.thread_id)} className="text-fg-secondary underline">
+                  <Link
+                    to={links.run(run.thread_id)}
+                    className="text-fg-secondary underline underline-offset-2 transition-colors duration-(--dur-quick) ease-out hover:text-fg"
+                  >
                     {run.goal ?? "—"}
                   </Link>
                 </td>

@@ -14,15 +14,17 @@ interface PanelProps {
 }
 
 /** A docked panel: nearly square (--radius-panel, 3px), separated by a border and a surface hue,
- * and carrying NO shadow — elevation in the docked layer is never a shadow (§3.3). The title is
- * sentence-case --text-xs in --text-muted at normal tracking, not a tracked-out caps eyebrow (§4). */
+ * and carrying NO elevation shadow at rest — that is unchanged by §3.3's M9g revision. It does
+ * carry `shadow-highlight`, a barely-there inset top edge: material definition, not elevation (the
+ * distinction the revised §3.3 draws explicitly). The title is sentence-case --text-xs in
+ * --text-muted at normal tracking, not a tracked-out caps eyebrow (§4). */
 export function Panel({ title, meta, children, className, id }: PanelProps) {
   const titleId = useId();
   return (
     <section
       id={id}
       aria-labelledby={titleId}
-      className={cn("rounded-panel border border-line-strong bg-surface-panel", className)}
+      className={cn("rounded-panel border border-line-strong bg-surface-panel shadow-highlight", className)}
     >
       <header className="flex items-baseline justify-between gap-3 border-b border-line-hairline px-4 py-2">
         <h2 id={titleId} className="text-xs font-medium text-fg-muted">

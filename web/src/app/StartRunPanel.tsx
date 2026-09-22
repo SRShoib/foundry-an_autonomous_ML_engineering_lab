@@ -9,7 +9,7 @@ import { Skeleton } from "../components/states/Skeleton";
 
 const DEFAULT_BUDGET_USD = 20;
 const inputClass =
-  "min-h-11 rounded-control border border-line-control bg-surface-panel px-3 text-sm text-fg frame:min-h-8";
+  "min-h-11 rounded-control border border-line-control bg-surface-panel px-3 text-sm text-fg transition-colors duration-(--dur-quick) ease-out hover:border-accent frame:min-h-8";
 
 /** docs/design-plan.md §6's start-a-run panel: a docked panel above the table, not a modal, with
  * three fields — dataset select (from the registry, `GET /datasets`), goal, budget. Submits via
@@ -97,7 +97,7 @@ export function StartRunPanel() {
               />
             </div>
 
-            <Button type="submit" disabled={!canSubmit || startRun.isPending}>
+            <Button type="submit" variant="primary" disabled={!canSubmit || startRun.isPending}>
               {startRun.isPending ? "Starting…" : "Start run"}
             </Button>
           </div>

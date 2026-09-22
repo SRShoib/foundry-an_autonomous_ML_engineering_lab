@@ -47,6 +47,16 @@
   --status-info: #6494f0;
   --status-idle: #66798d;
 
+  /* §3.1 M9g: one deliberate accent for primary actions and focus emphasis ONLY — never team
+     identity, never status. A saturated indigo-violet, chosen at a different hue from
+     --status-info's cooler sky-blue so a primary action never reads as an informational state.
+     Worst-case contrast computed, not eyeballed: --accent 3.17:1 (graphic floor) on
+     --surface-raised; --accent-contrast 4.51:1 against --accent itself (see §11). */
+  --accent: #6a63f0;
+  --accent-hover: #7c74f5;
+  --accent-soft: rgb(106 99 240 / 0.14);
+  --accent-contrast: #ffffff;
+
   /* budget meter: a continuous quantity gets its own ramp (safe <70%, pressure 70-90%, critical >90%) */
   --meter-track: #232c38;
   --meter-safe: #4fb286;
@@ -54,12 +64,26 @@
   --meter-critical: #e5726d;
   --meter-projected: rgb(217 164 76 / 0.35);
 
-  /* §3.3 shape: radius encodes permanence. No box-shadow exists in the docked layer. */
+  /* §3.3 shape: radius encodes permanence. A docked panel still carries no shadow at rest — that
+     is unchanged — but M9g replaces the single --shadow-float with a small tokenized ladder so
+     shadow can carry hover/press feedback without ever becoming a resting property of a docked
+     element. All tinted rather than neutral grey. Components reference these tokens exclusively;
+     design-invariants.test.ts's shadows-are-tokenized rule fails any literal box-shadow that isn't
+     var(--shadow-*) or none. */
   --radius-panel: 3px;
   --radius-control: 4px;
   --radius-float: 10px;
   --radius-pill: 999px;
-  --shadow-float: 0 16px 40px -12px rgba(6, 10, 16, 0.72);
+  --shadow-highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-hover: 0 6px 20px -8px rgb(6 10 16 / 0.6);
+  --shadow-raised: 0 10px 28px -10px rgb(6 10 16 / 0.68);
+  --shadow-float: 0 1px 2px rgb(6 10 16 / 0.4), 0 16px 40px -12px rgb(6 10 16 / 0.72);
+
+  /* Glass, for the float layer only (drawers, gate dialogs) — never the docked layer, which must
+     stay legible with nothing rendered behind it. Alpha stays >=0.84 so text inside reads at the
+     contrast already verified for --surface-raised; this is a texture, not a transparency risk. */
+  --surface-glass: rgb(34 43 54 / 0.84);
+  --surface-glass-border: rgb(51 64 79 / 0.7);
 
   /* 4px grid: 4 8 12 16 24 32 48 64 */
   --space-1: 4px;
@@ -172,10 +196,23 @@
   --status-info: #2a5fc7;
   --status-idle: #6b7d91;
 
+  /* Same hue family as dark's --accent, darkened to hold 3:1 on white paper the same way every
+     other light-theme hue in this file is darkened rather than lightened (§3.2). */
+  --accent: #4c3fe0;
+  --accent-hover: #4335c9;
+  --accent-soft: rgb(76 63 224 / 0.08);
+  --accent-contrast: #ffffff;
+
   /* §3.2 leaves the meter ramp implicit: it reuses the status hues, exactly as dark does */
   --meter-track: #dce3eb;
   --meter-safe: #1f7a55;
   --meter-pressure: #8e620e;
   --meter-critical: #c0342e;
   --meter-projected: rgb(142 98 14 / 0.35);
+
+  /* --shadow-* is intentionally NOT redefined here, same precedent as --shadow-float already set:
+     a dark-tinted shadow at low alpha still reads correctly on paper. --surface-glass IS redefined
+     — it is a surface color, not a shadow, and §3.2's "never inherit a colour from dark" applies. */
+  --surface-glass: rgb(255 255 255 / 0.86);
+  --surface-glass-border: rgb(194 205 217 / 0.7);
 }

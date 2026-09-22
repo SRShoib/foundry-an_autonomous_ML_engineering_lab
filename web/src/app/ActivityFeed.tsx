@@ -295,7 +295,7 @@ export function ActivityFeed({
         <button
           type="button"
           onClick={goLive}
-          className="sticky bottom-3 left-1/2 num inline-flex -translate-x-1/2 items-center gap-1.5 rounded-pill border border-line-control bg-surface-raised px-3 py-1.5 text-xs text-fg shadow-float"
+          className="sticky bottom-3 left-1/2 num inline-flex -translate-x-1/2 items-center gap-1.5 rounded-pill border border-line-control bg-surface-raised px-3 py-1.5 text-xs text-fg shadow-float transition-[background-color,border-color,color] duration-(--dur-quick) ease-out hover:border-accent hover:bg-accent hover:text-accent-contrast"
         >
           <span aria-hidden="true">▼</span> live
         </button>

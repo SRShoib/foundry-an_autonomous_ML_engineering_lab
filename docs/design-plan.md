@@ -120,6 +120,24 @@ questions:
 danger state. `--status-idle` is for dots and glyphs and always paired with a text label in
 `--text-muted`; it is not a text color.
 
+**Accent.** M9g. One deliberate accent, `--accent`, for primary actions and focus emphasis only —
+"Start run", "Approve", the active tab indicator, the range-input thumb. It is a saturated
+indigo-violet, chosen to sit at a different hue from `--status-info`'s cooler sky-blue so a primary
+action never reads as an informational state. It is never used for team identity or status, and no
+second accent is introduced beside it — six team hues plus one status ramp plus one accent is the
+full palette.
+
+| Token | Hex | Use | Min contrast |
+|---|---|---|---|
+| `--accent` | `#6A63F0` | primary buttons, active tab rail, focus emphasis | 3.17:1 (graphic floor) |
+| `--accent-hover` | `#7C74F5` | hover/press state of the above | — (visual only) |
+| `--accent-soft` | `rgb(106 99 240 / 0.14)` | translucent wash behind an active/selected row | exempt, decorative |
+| `--accent-contrast` | `#FFFFFF` | label/icon color sitting on a filled `--accent` surface | 4.51:1 against `--accent` |
+
+`--accent` is classified as a graphic token (WCAG 1.4.11, 3:1), the same floor as `--line-control`:
+it is a boundary/fill, never body text. `--accent-contrast` is verified against `--accent` itself,
+not the five grounds — see §11.
+
 **Budget meter.** A continuous quantity gets its own ramp:
 
 | Token | Value | Threshold |
@@ -167,9 +185,30 @@ Radius encodes **permanence**.
 | `--radius-float` | `10px` | drawers, gate dialogs, the red-team alert |
 | `--radius-pill` | `999px` | replay speed selector, status dots only |
 
-**No `box-shadow` exists in the docked layer.** The system defines exactly one shadow, for the
-float layer, and it is tinted rather than neutral grey:
-`--shadow-float: 0 16px 40px -12px rgba(6, 10, 16, 0.72)`.
+**Shadow is an interaction signal, not a resting property of a docked panel (revised, M9g).** A
+docked panel still carries no shadow while idle — that rule is unchanged. What changes: shadows are
+now a small tokenized ladder rather than a single value, all tinted rather than neutral grey, and
+components reference the tokens exclusively (`design-invariants.test.ts`'s `shadows-are-tokenized`
+rule fails any literal `box-shadow` that isn't `var(--shadow-*)`).
+
+| Token | Value | Applies to |
+|---|---|---|
+| `--shadow-highlight` | `inset 0 1px 0 rgb(255 255 255 / 0.05)` | a barely-there top edge on interactive panels — material, not elevation |
+| `--shadow-hover` | `0 6px 20px -8px rgb(6 10 16 / 0.6)` | the lift a docked row/panel gains on hover only |
+| `--shadow-raised` | `0 10px 28px -10px rgb(6 10 16 / 0.68)` | active/pressed or persistently-elevated controls (the primary button) |
+| `--shadow-float` | `0 1px 2px rgb(6 10 16 / 0.4), 0 16px 40px -12px rgb(6 10 16 / 0.72)` | drawers, gate dialogs, the red-team alert — now a contact shadow plus the original cast shadow |
+
+A docked panel at rest still has zero elevation. `--shadow-hover`/`--shadow-raised` only ever
+appear behind a `hover:`/`active:`/`data-[state=open]:` modifier — never unconditionally on a
+docked element — which is what keeps "elevation is earned by the pointer" distinct from "everything
+floats," the exact trope §3.3's original self-critique (below) rejected.
+
+**Glass, for the float layer only.** `--surface-glass` / `--surface-glass-border` give drawers and
+gate dialogs translucency plus a `backdrop-blur` instead of a flat `--surface-raised` fill. Alpha
+stays at 0.84+ so text inside still reads at the contrast already verified for `--surface-raised` —
+this is a material texture behind an opaque-enough panel, not a transparency effect that risks
+legibility. Never used in the docked layer, where a panel must stay legible with nothing rendered
+behind it.
 
 Spacing is a 4px grid: `4 8 12 16 24 32 48 64`.
 
@@ -381,6 +420,25 @@ layout reorder is instant, and the red-team sequence becomes a single state chan
 connector drawn statically. No motion is removed silently; the information each moment carries is
 always still present.
 
+### Interaction motion (M9g)
+
+The table above is entirely data-driven — it fires on events arriving, never on the pointer. Before
+M9g the app had three CSS transitions total and no hover state on any clickable row. This closes
+that gap with the same discipline: every rule below reuses an existing `--dur-*`/`--ease-*` token,
+none introduces a new duration, and reduced-motion collapses each to an instant state change exactly
+as the data-driven table does.
+
+| Moment | Spec |
+|---|---|
+| Row hover (leaderboard, audit, activity feed, runs table, eval table) | Background to `--surface-raised` and rail/border brighten, `--dur-quick`/`--ease-out`. |
+| Panel hover (interactive panels only) | `--shadow-highlight` is always present; `--shadow-hover` fades in, `--dur-quick`. |
+| Button press | `scale(0.98)`, `--dur-instant`; primary variant additionally crossfades to `--accent-hover`. |
+| Focus-visible | Unchanged: the 2px `--line-focus` ring, never suppressed (§10). A filled primary control's ring sits on `--accent-contrast` for visibility against `--accent`. |
+| Tab indicator (mobile tabs, drawer tabs) | The selected-tab underline is a `layoutId`-shared element that slides between tabs, `--dur-base`/`--ease-in-out` — the same shared-layout technique §7's gate-confirm "fly" already uses, not new machinery. |
+| Replay speed pill | Selected-state pill slides via the same shared-layout technique, `--dur-quick`. |
+| Skeleton | Reverses §9's "shimmer-free": a slow sweep, `--dur-moment`, opacity-modulated only (no shimmer-as-decoration on a dozen static blocks at once — see §9). |
+| "Live" stream-health dot | The one narrow, static (never pulsing) glow outside §8: reserved for "you are watching this happen right now" — the single state that pill exists to answer. Every other status dot stays flat. |
+
 ---
 
 ## 8. The memorable moment: red-team invalidation
@@ -413,7 +471,12 @@ here is why.*
 ## 9. States
 
 Skeletons mirror the real grid: the three-column frame renders immediately with panel outlines and
-shimmer-free muted blocks, so nothing reflows on load. Empty states name the next action ("No runs
+muted blocks, so nothing reflows on load. M9g reverses the original "shimmer-free" rule: a single
+skeleton block now carries a slow (`--dur-moment`) opacity sweep, because a lone static block reads
+as inert rather than loading. The original objection — "a moving highlight on a dozen blocks is
+decoration" — still holds for a *dense grid* of skeletons, so the sweep is deliberately slow and
+low-contrast rather than a bright shimmer, and stays legible rather than decorative even when
+several blocks are visible at once. Empty states name the next action ("No runs
 yet. Pick a dataset above to start one."). Error states name the failure and the fix, using
 `RunStatus.error` verbatim rather than a generic message. Stream-disconnected shows the
 reconnecting bar with automatic retry and backoff, and the feed stays readable and scrollable
@@ -451,6 +514,14 @@ boundaries must meet 3:1. Result: all 32 token/surface sets pass; the tightest i
 
 M9b turns this check into a unit test over the real CSS variables so the tokens cannot drift below
 AA unnoticed.
+
+**M9g's accent** (§3.1) is checked the same way, against a floor chosen deliberately, not
+loosely: `--accent` is a graphic token (3:1) — worst case 3.17:1, on `--surface-raised`, the same
+surface every other worst-case in this table lands on. `--accent-contrast` is checked against
+`--accent` itself rather than the five grounds, since it is only ever read as a label sitting on a
+filled `--accent` surface: 4.51:1, clearing the 4.5:1 text floor with real (if not generous)
+margin. Both were chosen by computing the ratio first, the same discipline as the rest of this
+table, not by eye.
 
 ---
 
@@ -515,3 +586,17 @@ Two critiques beyond SPEC's list:
 - **Unverified accessibility claims.** The first draft asserted AA without computing it, and
   computing it found seven failures, one of them on the red-team alert itself. Fixed in §3 and
   recorded in §11.
+
+8. **Flat, motionless surfaces read as unfinished rather than restrained.** M9a–M9f's console had
+   real motion (§7), but all of it was data-driven — it fired on events, never on the pointer.
+   Leaderboard rows, audit rows, and both dense tables were clickable with no hover or focus
+   feedback beyond the unstyled default; the whole app had three CSS transitions total. Checked
+   against real screenshots rather than against the token list, the flatness read as an incomplete
+   build, not a deliberate one — and primary actions ("Start run", "Approve") were visually
+   identical to secondary ones ("Reject"), which is a usability gap, not only a taste question.
+   M9g's fix is scoped narrowly: one accent color (§3.1) for primary actions and focus emphasis
+   only, a tokenized shadow ladder (§3.3) that fires on interaction rather than at rest, and an
+   interaction-motion table (§7) that runs alongside the event-driven one rather than replacing it.
+   What stays cut, unchanged from critiques 1–7: no second accent, no box-shadow on a docked panel
+   at rest, no shimmer across a dense grid of simultaneous skeletons (a single skeleton may now
+   sweep; §9), no tracked caps, no weight above 600.
