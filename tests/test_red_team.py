@@ -275,6 +275,44 @@ def test_adjudicator_does_not_invalidate_clean_evidence_even_with_a_permissive_l
     assert update["audited_experiments"] == ["exp-001"]
 
 
+def test_adjudicator_attaches_measured_evidence_to_an_invalidated_finding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M9d: the finding carries the SAME numbers the code floor judged it against, as real
+    fields — not only embedded in explanation prose (design-plan.md §8: "the audit tool's actual
+    measured evidence")."""
+    monkeypatch.setattr(red_team, "get_llm", lambda role: _always_valid())
+    pending = [_result("exp-001", roc_auc=0.99)]
+    state = _red_team_state(pending=pending, audit_report=_leaky_report())
+
+    update = adjudicator(state)
+
+    finding = cast("list[RedTeamFinding]", update["invalidations"])[0]
+    assert finding.evidence is not None
+    assert finding.evidence.worst_column == "retention_call_outcome"
+    assert finding.evidence.worst_column_target_auc == pytest.approx(0.9962)
+    assert finding.evidence.duplicate_row_rate == pytest.approx(0.0)
+    assert finding.evidence.reported_metric_name == "roc_auc"
+    assert finding.evidence.reported_metric_value == pytest.approx(0.99)
+
+
+def test_adjudicator_attaches_evidence_to_a_valid_finding_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The measurement is what justifies a CLEARING verdict too, not only an invalidating one."""
+    monkeypatch.setattr(red_team, "get_llm", lambda role: _always_valid())
+    pending = [_result("exp-001", roc_auc=0.85)]
+    state = _red_team_state(dataset_ref="churn", pending=pending, audit_report=_clean_report())
+
+    update = adjudicator(state)
+
+    finding = cast("list[RedTeamFinding]", update["invalidations"])[0]
+    assert finding.verdict == "valid"
+    assert finding.evidence is not None
+    assert finding.evidence.worst_column == "contract_type"  # the higher of the two clean AUCs
+    assert finding.evidence.duplicate_row_rate == pytest.approx(0.0)
+
+
 def test_adjudicator_returns_empty_update_when_nothing_pending() -> None:
     assert adjudicator(_red_team_state(pending=[])) == {}
 

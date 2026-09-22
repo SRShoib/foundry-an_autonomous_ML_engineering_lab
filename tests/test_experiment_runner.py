@@ -273,6 +273,69 @@ def test_zero_self_debug_attempts_still_builds_a_result(monkeypatch: pytest.Monk
     assert result.status == "failed"
     assert result.attempts == 0
     assert (result.code, result.stdout, result.stderr) == ("", "", "")
+    assert result.attempt_history == []
+
+
+def test_the_spec_that_produced_a_result_is_carried_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M9d's experiment drawer `spec` tab: experiment_runner already has the ExperimentSpec its
+    Send payload named, so ExperimentResult.spec is that same object, not a re-derivation."""
+    monkeypatch.setattr(runner_module, "get_llm", lambda role: _RecordingLLM())
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run_success)
+    spec = _spec("exp-042")
+
+    result = _experiments(runner_module.experiment_runner(_payload(spec=spec)))[0]
+    assert result.spec == spec
+
+
+def test_attempt_history_records_every_attempt_with_what_changed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """§6's drawer `attempts` tab: attempt 1 fails execution, attempt 2 fails on unparseable
+    metrics, attempt 3 succeeds — each attempt keeps its OWN code/output, not the last one's."""
+    monkeypatch.setattr(runner_module, "get_llm", lambda role: _RecordingLLM())
+    results = [
+        _sandbox_result(exit_code=1, stderr="ValueError: broke"),
+        _sandbox_result(exit_code=0, stdout="no metrics printed"),
+        _sandbox_result(exit_code=0, stdout='FOUNDRY_METRICS {"roc_auc": 0.9}'),
+    ]
+    calls: list[str] = []
+
+    def _fake_run(code: str, **kwargs: Any) -> SandboxResult:
+        calls.append(code)
+        return results[len(calls) - 1]
+
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run)
+
+    result = _experiments(runner_module.experiment_runner(_payload()))[0]
+    assert result.attempts == 3
+    history = result.attempt_history
+    assert [a.outcome for a in history] == ["failed_execution", "failed_metrics", "success"]
+    assert [a.attempt for a in history] == [0, 1, 2]
+    assert history[0].error is not None and "broke" in history[0].error
+    assert history[1].error is not None and "no valid metrics" in history[1].error
+    assert history[2].error is None
+    # Each attempt's own code, not overwritten by the next one's.
+    assert history[0].code == "# attempt 0"
+    assert history[2].code == "# attempt 2"
+
+
+def test_attempt_history_length_matches_attempts_when_the_runner_gives_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(runner_module, "get_llm", lambda role: _RecordingLLM())
+    calls: list[str] = []
+
+    def _fake_run(code: str, **kwargs: Any) -> SandboxResult:
+        calls.append(code)
+        return _sandbox_result(exit_code=1, stderr=f"ValueError: broken attempt {len(calls)}")
+
+    monkeypatch.setattr(runner_module.sandbox, "run", _fake_run)
+
+    result = _experiments(runner_module.experiment_runner(_payload()))[0]
+    assert len(result.attempt_history) == settings.self_debug_max_attempts == result.attempts
+    assert all(a.outcome == "failed_execution" for a in result.attempt_history)
 
 
 @pytest.mark.docker

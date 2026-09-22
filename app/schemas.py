@@ -14,6 +14,7 @@ from foundry.models import (
     DataProfile,
     ExperimentResult,
     LeaderboardEntry,
+    PendingSpecCost,
     RedTeamFinding,
 )
 
@@ -49,6 +50,9 @@ class PendingApproval(BaseModel):
     best_metric_name: str | None = None
     best_metric_value: float | None = None
     n_invalidated: int = 0
+    # M9d: mirrors ApprovalRequest.pending_specs field-for-field — app/runs.py constructs this
+    # via PendingApproval(thread_id=thread_id, **payload) straight off the interrupt() value.
+    pending_specs: list[PendingSpecCost] = Field(default_factory=list)
 
 
 class RunStatus(BaseModel):

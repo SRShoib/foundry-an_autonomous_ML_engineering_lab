@@ -121,6 +121,33 @@ def test_budget_approval_request_floor_beats_a_low_balled_estimate() -> None:
     assert request is not None
     assert "per-run cap" in request.reason
     assert request.projected_usd == pytest.approx(3.0)  # floored at the completed mean, not 0.01
+    # M9d: the gate dialog's "pending" row must show the FLOORED number, not the spec's own
+    # (low-balled) estimate — design-plan.md §6's "exp-005 lightgbm $2.10" rows.
+    assert len(request.pending_specs) == 1
+    assert request.pending_specs[0].experiment_id == "exp-002"
+    assert request.pending_specs[0].model_family == "mlp"
+    assert request.pending_specs[0].projected_cost_usd == pytest.approx(3.0)
+
+
+def test_budget_approval_request_pending_specs_are_sorted_and_paired_by_id() -> None:
+    specs = [
+        ExperimentSpec(
+            experiment_id="exp-006", model_family="xgboost", hyperparams={}, rationale="r",
+            est_cost_usd=2.46,
+        ),
+        ExperimentSpec(
+            experiment_id="exp-005", model_family="lightgbm", hyperparams={}, rationale="r",
+            est_cost_usd=2.10,
+        ),
+    ]
+    state = _state(budget_usd=1.0)  # tiny cap: both specs' own estimates already trip it
+    request = budget_approval_request(state, specs, spent_usd=0.0)
+    assert request is not None
+    assert [s.experiment_id for s in request.pending_specs] == ["exp-005", "exp-006"]
+    assert [s.model_family for s in request.pending_specs] == ["lightgbm", "xgboost"]
+    assert [s.projected_cost_usd for s in request.pending_specs] == [
+        pytest.approx(2.10), pytest.approx(2.46),
+    ]
 
 
 def test_budget_approval_request_returns_none_once_already_asked() -> None:

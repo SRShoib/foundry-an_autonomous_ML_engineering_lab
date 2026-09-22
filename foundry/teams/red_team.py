@@ -59,6 +59,7 @@ from foundry.config import settings
 from foundry.datasets import get_dataset
 from foundry.llm import get_llm
 from foundry.models import (
+    AuditEvidence,
     CleaningPlan,
     CostEntry,
     CVStrategy,
@@ -260,7 +261,18 @@ def adjudicator(state: RedTeamState) -> dict[str, object]:
             contamination=contamination,
             metric_implausible=metric_implausible,
         )
-        findings.append(RedTeamFinding(experiment_id=result.experiment_id, **verdict.model_dump()))
+        evidence = AuditEvidence(
+            worst_column=context.worst_column_name,
+            worst_column_target_auc=context.worst_column_target_auc,
+            duplicate_row_rate=context.duplicate_row_rate,
+            reported_metric_name=context.primary_metric,
+            reported_metric_value=context.primary_metric_value,
+        )
+        findings.append(
+            RedTeamFinding(
+                experiment_id=result.experiment_id, evidence=evidence, **verdict.model_dump()
+            )
+        )
         audited_ids.append(result.experiment_id)
 
         if verdict.verdict == "invalidated" and verdict.category == "leakage" and leak_column:

@@ -111,6 +111,7 @@
   --dur-slow: 420ms;
   --dur-deliberate: 700ms;
   --dur-moment: 1400ms;
+  --dur-arm: 400ms; /* §6: the budget/final gate's Approve control fills in before it is pressable */
 
   /* §10 focus: a 2px ring at a 2px offset, never suppressed */
   --focus-ring-width: 2px;

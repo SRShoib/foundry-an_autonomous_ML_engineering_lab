@@ -178,13 +178,25 @@ export interface ActivityFeedProps {
   /** AppFrame's own `<main>` — the one scrolling channel (§2) — shared via `mainRef` rather than
    * the feed nesting a second scroller inside it. */
   scrollElementRef: RefObject<HTMLElement | null>;
+  /** M9d §7: "the feed stops following" while a gate dialog is open. Suppresses auto-scroll and
+   * hides the "▼ live" control without touching the operator's own scroll-position preference —
+   * `following` itself is untouched, so it resumes exactly where it left off once the gate closes. */
+  holdFollow?: boolean;
 }
 
 /** The centre column's body (§5): a two-line grid row per event, team-hue rails, batched arrival
  * motion, and follow-mode with a "▼ live" control to re-engage it once the operator has scrolled
  * away. Virtualized once the released feed passes VIRTUALIZE_ABOVE. */
-export function ActivityFeed({ events, batchSize, ratePerSecond, connected, scrollElementRef }: ActivityFeedProps) {
+export function ActivityFeed({
+  events,
+  batchSize,
+  ratePerSecond,
+  connected,
+  scrollElementRef,
+  holdFollow = false,
+}: ActivityFeedProps) {
   const [following, setFollowing] = useState(true);
+  const effectiveFollowing = following && !holdFollow;
   const shouldVirtualize = events.length > VIRTUALIZE_ABOVE;
 
   const virtualizer = useVirtualizer({
@@ -206,11 +218,11 @@ export function ActivityFeed({ events, batchSize, ratePerSecond, connected, scro
   }, [scrollElementRef]);
 
   useEffect(() => {
-    if (!following) return;
+    if (!effectiveFollowing) return;
     const element = scrollElementRef.current;
     if (element === null) return;
     element.scrollTop = element.scrollHeight;
-  }, [events.length, following, scrollElementRef]);
+  }, [events.length, effectiveFollowing, scrollElementRef]);
 
   function goLive(): void {
     setFollowing(true);
@@ -279,7 +291,7 @@ export function ActivityFeed({ events, batchSize, ratePerSecond, connected, scro
         </ol>
       )}
 
-      {following ? null : (
+      {holdFollow || following ? null : (
         <button
           type="button"
           onClick={goLive}
