@@ -1,12 +1,32 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, NavLink } from "react-router";
 
 import type { RunStatusKind } from "../api/types";
 import { DisconnectedBar } from "../components/states/DisconnectedBar";
+import { cn } from "../lib/cn";
 import type { ConnectionState } from "../run/RunSource";
 import { ReplayTransport } from "./ReplayTransport";
 import { RunStatusPill, StreamHealthPill } from "./StatusPills";
 import { ThemeToggle } from "./ThemeToggle";
+
+/** M9e: the only way to reach /eval — sentence case, no tracked caps, no arrow (SPEC's avoid-list).
+ * Shown only on the PageFrame screens (runs home, report, eval), via TopBarProps.nav — NOT on the
+ * live run view, whose top bar is already at capacity on mobile (§5's instrument bar reserves it
+ * for phase/spend/stream-health) and whose own "foundry" link is the way back to runs home. */
+function PrimaryNav() {
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    cn("text-sm", isActive ? "text-fg" : "text-fg-secondary hover:text-fg");
+  return (
+    <nav aria-label="Primary" className="flex items-center gap-3">
+      <NavLink to="/runs" className={linkClass}>
+        runs
+      </NavLink>
+      <NavLink to="/eval" className={linkClass}>
+        eval
+      </NavLink>
+    </nav>
+  );
+}
 
 export interface Meta {
   label: string;
@@ -22,6 +42,8 @@ interface TopBarProps {
   mode?: "live" | "replay";
   /** Renders the replay transport; it draws nothing for a live run. */
   transport?: boolean;
+  /** Shows the runs/eval PrimaryNav. Only PageFrame.tsx passes this — see PrimaryNav's docstring. */
+  nav?: boolean;
   children?: ReactNode;
 }
 
@@ -31,6 +53,7 @@ export function TopBar({
   connection,
   mode = "live",
   transport = false,
+  nav = false,
   children,
 }: TopBarProps) {
   return (
@@ -39,6 +62,8 @@ export function TopBar({
         <Link to="/runs" className="text-md font-semibold text-fg">
           foundry
         </Link>
+
+        {nav && <PrimaryNav />}
 
         <dl className="hidden min-w-0 items-center gap-4 frame:flex">
           {meta.map((item) => (

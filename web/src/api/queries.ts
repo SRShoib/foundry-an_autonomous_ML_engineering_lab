@@ -13,6 +13,7 @@ import {
 import { useApiClient } from "./ApiClientContext";
 import { unwrap } from "./client";
 import type {
+  DatasetOption,
   ExperimentResult,
   PendingApproval,
   ReplaySummary,
@@ -30,13 +31,29 @@ export const queryKeys = {
   approvals: ["approvals"] as const,
   evalResults: ["eval"] as const,
   replays: ["replays"] as const,
+  datasets: ["datasets"] as const,
 };
+
+/** Runs home (M9e) polls: a run's spend and its `updated_at` age are live values that move even
+ * with nobody watching the individual run's own SSE stream. 4s matches BudgetMeter's own sense of
+ * "current" closely enough for a list view without hammering the API. */
+const RUNS_LIST_REFETCH_MS = 4000;
 
 export function useRuns(): UseQueryResult<RunStatus[]> {
   const api = useApiClient();
   return useQuery({
     queryKey: queryKeys.runs,
     queryFn: async ({ signal }) => unwrap(await api.GET("/runs", { signal })),
+    refetchInterval: RUNS_LIST_REFETCH_MS,
+  });
+}
+
+export function useDatasets(): UseQueryResult<DatasetOption[]> {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.datasets,
+    queryFn: async ({ signal }) => unwrap(await api.GET("/datasets", { signal })),
+    staleTime: Number.POSITIVE_INFINITY, // the bundled registry never changes at runtime
   });
 }
 

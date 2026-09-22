@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from foundry.datasets import DatasetSpec
 from foundry.models import (
     WIRE_CONFIG,
     DataProfile,
@@ -75,3 +76,34 @@ class RunStatus(BaseModel):
     model_card_md: str | None = None
     data_profile: DataProfile | None = None
     cost_by_agent: dict[str, float] = Field(default_factory=dict)
+    # M9e: the runs-home table's dataset/goal/updated columns (docs/design-plan.md §6). goal and
+    # dataset_ref are already in FoundryState and simply weren't projected before; updated_at is
+    # the checkpointer's own StateSnapshot.created_at — the LAST checkpoint's timestamp, i.e. most
+    # recent activity, NOT when the run started (recovering a true start time would mean scanning
+    # every checkpoint for the thread). Named accordingly rather than as `created_at`.
+    goal: str | None = None
+    dataset_ref: str | None = None
+    updated_at: str | None = None
+
+
+class DatasetOption(BaseModel):
+    """M9e: what the console's start-a-run panel needs to populate its dataset select
+    (docs/design-plan.md §6) — deliberately NOT DatasetSpec itself, which carries `path`, a host
+    filesystem path the API must never publish."""
+
+    model_config = WIRE_CONFIG
+    key: str
+    name: str
+    task_type: Literal["binary_classification", "multiclass_classification", "regression"]
+    primary_metric: Literal["roc_auc", "accuracy", "f1", "rmse"]
+    description: str
+
+    @classmethod
+    def from_spec(cls, key: str, spec: DatasetSpec) -> DatasetOption:
+        return cls(
+            key=key,
+            name=spec.name,
+            task_type=spec.task_type,
+            primary_metric=spec.primary_metric,
+            description=spec.description,
+        )

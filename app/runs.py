@@ -113,6 +113,9 @@ class RunManager:
             # checkpoint has landed in the saver, and a get_state by its id returns an empty
             # snapshot for most checkpoints (verified). The chunk carries the same live state
             # objects, and never carries interrupts mid-leg — those are read once the leg settles.
+            # updated_at is omitted (stays None): the "checkpoints" stream payload is built from
+            # map_debug_checkpoint's own dict (values/next/tasks/metadata/config), which carries no
+            # timestamp — unlike get_state()'s StateSnapshot, which the other two call sites use.
             status = self._project(
                 handle.thread_id, handle, checkpoint["values"], (), checkpoint["next"]
             )
@@ -136,7 +139,7 @@ class RunManager:
             snapshot = self._graph.get_state(run_config(thread_id))
             status = self._project(
                 thread_id, None, snapshot.values or {}, snapshot.interrupts, snapshot.next,
-                failure=failure,
+                failure=failure, updated_at=snapshot.created_at,
             )
             for event in events:
                 self._recorder.record(thread_id, event, status)
@@ -291,7 +294,8 @@ class RunManager:
         if handle is None and snapshot.created_at is None:
             raise KeyError(thread_id)
         return self._project(
-            thread_id, handle, snapshot.values or {}, snapshot.interrupts, snapshot.next
+            thread_id, handle, snapshot.values or {}, snapshot.interrupts, snapshot.next,
+            updated_at=snapshot.created_at,
         )
 
     def _project(
@@ -303,6 +307,7 @@ class RunManager:
         next_nodes: Sequence[str],
         *,
         failure: str | None = None,
+        updated_at: str | None = None,
     ) -> RunStatus:
         pending_approval: PendingApproval | None = None
         if interrupts:
@@ -363,4 +368,7 @@ class RunManager:
             model_card_md=values.get("model_card_md"),
             data_profile=values.get("data_profile"),
             cost_by_agent=cost_by_agent(values.get("costs", [])),
+            goal=values.get("goal"),
+            dataset_ref=values.get("dataset_ref"),
+            updated_at=updated_at,
         )

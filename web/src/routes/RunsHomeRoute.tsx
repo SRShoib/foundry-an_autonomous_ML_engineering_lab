@@ -1,22 +1,24 @@
 import { Link } from "react-router";
 
 import { useRuns } from "../api/queries";
-import { RunStatusPill } from "../app/StatusPills";
+import { RunsTable } from "../app/RunsTable";
+import { StartRunPanel } from "../app/StartRunPanel";
 import { PageFrame } from "../app/PageFrame";
 import { EmptyState } from "../components/states/EmptyState";
 import { QueryErrorState } from "../components/states/ErrorState";
 import { SkeletonLines } from "../components/states/Skeleton";
 import { Panel } from "../components/ui/Panel";
-import { formatUsd, shortId } from "../lib/format";
 import { DEMO_REPLAY, links } from "./routes";
 
-/** M9b: the runs list is a plain list with real loading, empty and error states. The dense table
- * and the start-a-run panel of docs/design-plan.md §6 arrive with M9e. */
+/** docs/design-plan.md §6: a start-a-run panel docked above a dense runs table — deliberately not
+ * a card grid, not a modal. */
 export function RunsHomeRoute() {
   const runs = useRuns();
 
   return (
     <PageFrame title="runs">
+      <StartRunPanel />
+
       <Panel title="recorded runs">
         <div className="flex flex-col gap-1">
           <Link to={links.replay(DEMO_REPLAY)} className="text-md font-medium text-fg underline">
@@ -37,22 +39,10 @@ export function RunsHomeRoute() {
         {runs.isSuccess && runs.data.length === 0 && (
           <EmptyState
             title="No runs yet"
-            hint="Start one with POST /runs on the API. The console's own start form arrives with the runs home screen."
+            hint="Pick a dataset above to start one, or open the recorded demo."
           />
         )}
-        {runs.isSuccess && runs.data.length > 0 && (
-          <ul className="flex flex-col divide-y divide-line-hairline">
-            {runs.data.map((run) => (
-              <li key={run.thread_id} className="flex items-center justify-between gap-4 py-2">
-                <Link to={links.run(run.thread_id)} className="num text-sm text-fg underline">
-                  {shortId(run.thread_id)}
-                </Link>
-                <RunStatusPill status={run.status} />
-                <span className="num text-sm text-fg-secondary">{formatUsd(run.spent_usd)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {runs.isSuccess && runs.data.length > 0 && <RunsTable runs={runs.data} />}
       </Panel>
     </PageFrame>
   );
