@@ -51,8 +51,8 @@ export const RULES: readonly Rule[] = [
     ],
   },
   {
-    id: "one-shadow",
-    why: "§3.3: no box-shadow in the docked layer; the system defines exactly one, --shadow-float",
+    id: "shadows-are-tokenized",
+    why: "§3.3: shadow comes from the tokenized ladder (--shadow-highlight/-hover/-raised/-float) or is absent; never a literal value and never Tailwind's default scale",
     check: (source) => [
       ...matches(
         source,
@@ -60,7 +60,7 @@ export const RULES: readonly Rule[] = [
         (m) => `default Tailwind shadow ${m}`,
       ),
       ...[...source.matchAll(/box-shadow\s*:\s*([^;}]+)/g)]
-        .filter((m) => !/^\s*(?:var\(--shadow-float\)|none)\s*$/.test(m[1] ?? ""))
+        .filter((m) => !/^\s*(?:var\(--shadow-[\w-]+\)|none)\s*$/.test(m[1] ?? ""))
         .map((m) => `box-shadow:${m[1]}`),
     ],
   },

@@ -104,9 +104,12 @@ describe("Skeleton", () => {
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("does not shimmer: no animation classes (design-plan §9)", () => {
+  it("sweeps, not shimmers: the slow opacity utility, never a bright shimmer/pulse (design-plan §9, revised M9g)", () => {
     const { container } = render(<SkeletonLines lines={3} />);
-    expect(container.innerHTML).not.toMatch(/animate-|shimmer|pulse/);
+    expect(container.innerHTML).not.toMatch(/animate-|shimmer|\bpulse\b/);
+    for (const el of container.querySelectorAll("[aria-hidden]")) {
+      expect(el).toHaveClass("skeleton-sweep");
+    }
     expect(container.querySelectorAll("[aria-hidden]")).toHaveLength(3);
   });
 });

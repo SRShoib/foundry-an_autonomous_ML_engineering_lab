@@ -40,7 +40,7 @@ function CompactRow({ finding, onOpen }: { finding: RedTeamFinding; onOpen: (id:
         type="button"
         onClick={() => onOpen(finding.experiment_id)}
         aria-label={`Open experiment ${finding.experiment_id}`}
-        className="flex w-full items-baseline gap-3 text-left"
+        className="-mx-2 flex w-full items-baseline gap-3 rounded-control px-2 text-left transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised"
       >
         <span aria-hidden="true" className="num w-5 text-sm text-status-danger">
           ⊘
@@ -63,7 +63,7 @@ function ExpandedEntry({ finding, onOpen }: { finding: RedTeamFinding; onOpen: (
         type="button"
         onClick={() => onOpen(finding.experiment_id)}
         aria-label={`Open experiment ${finding.experiment_id}`}
-        className="num text-left text-sm text-fg-secondary"
+        className="num text-left text-sm text-fg-secondary underline-offset-2 transition-colors duration-(--dur-quick) ease-out hover:text-fg hover:underline"
       >
         {finding.experiment_id}
       </button>

@@ -86,6 +86,24 @@
   animation: bar-complete var(--dur-settle) var(--ease-out) both;
 }
 
+/* §9, revised M9g: a SINGLE skeleton block now carries a slow opacity sweep rather than staying
+   inert — the original objection ("a moving highlight on a dozen blocks is decoration") still
+   holds for a dense grid, so this stays slow (--dur-moment) and opacity-only, never a bright
+   shimmer gradient, and reads as one still-legible surface even with several on screen at once. */
+@keyframes skeleton-sweep {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@utility skeleton-sweep {
+  animation: skeleton-sweep var(--dur-moment) var(--ease-in-out) infinite;
+}
+
 /* §3.1's budget meter: "--meter-projected at 35% [opacity], 45° hatch, the projected_usd beyond
    spend". --meter-projected already carries the 35% alpha (tokens.css), so this utility only adds
    the diagonal repeat — never a literal colour of its own. */

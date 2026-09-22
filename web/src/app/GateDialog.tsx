@@ -176,16 +176,23 @@ export function GateDialog({ gate, onDecide }: GateDialogProps) {
 
         <div className="flex justify-end gap-3">
           <Button onClick={reject}>Reject</Button>
+          {/* §7 M9g: the fill still arms in --dur-arm before the control is pressable, but now
+              builds toward the accent-filled primary treatment (Button's `primary` variant) rather
+              than a neutral surface tint — the button visibly becomes the one primary action on
+              screen exactly as it becomes pressable, not before. */}
           <button
             type="button"
             disabled={!armed}
             onClick={approve}
             onKeyDown={swallowEnter}
-            className="relative min-h-11 overflow-hidden rounded-control border border-line-control px-3 text-sm font-medium text-fg frame:min-h-8 disabled:cursor-not-allowed"
+            className={cn(
+              "relative min-h-11 overflow-hidden rounded-control border px-3 text-sm font-medium frame:min-h-8 transition-colors duration-(--dur-quick) ease-out disabled:cursor-not-allowed",
+              armed ? "border-transparent bg-accent text-accent-contrast shadow-raised hover:bg-accent-hover" : "border-line-control text-fg",
+            )}
           >
             <motion.span
               aria-hidden="true"
-              className="absolute inset-0 origin-left bg-surface-raised"
+              className="absolute inset-0 origin-left bg-accent-soft"
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
               transition={{ duration: reducedMotion ? 0 : ARM_MS / 1000, ease: "linear" }}

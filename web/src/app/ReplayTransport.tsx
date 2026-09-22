@@ -1,3 +1,6 @@
+import { useId } from "react";
+import { motion } from "motion/react";
+
 import { cn } from "../lib/cn";
 import { formatClock } from "../lib/format";
 import { Button } from "../components/ui/Button";
@@ -38,6 +41,8 @@ function PauseIcon() {
 export function ReplayTransportView({ transport, onPlay, onPause, onSpeed, onSeek, locked }: ViewProps) {
   const { playing, speed, elapsedS, durationS } = transport;
   const fraction = durationS > 0 ? elapsedS / durationS : 0;
+  // §7 M9g: the selected pill slides via the same shared-layoutId technique as the tab indicator.
+  const pillId = useId();
 
   return (
     <div className="flex items-center gap-2 frame:gap-3">
@@ -62,13 +67,19 @@ export function ReplayTransportView({ transport, onPlay, onPause, onSpeed, onSee
               checked={speed === option}
               onChange={() => onSpeed(option)}
             />
+            {speed === option && (
+              <motion.span
+                aria-hidden="true"
+                layoutId={pillId}
+                className="absolute inset-0 rounded-pill border border-line-control bg-surface-raised shadow-highlight"
+                transition={{ duration: 0.24, ease: [0.65, 0, 0.35, 1] }}
+              />
+            )}
             <span
               className={cn(
-                "num inline-flex h-7 min-w-9 cursor-pointer items-center justify-center rounded-pill border px-2 text-xs",
+                "num relative inline-flex h-7 min-w-9 cursor-pointer items-center justify-center rounded-pill px-2 text-xs transition-colors duration-(--dur-quick) ease-out",
                 "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-line-focus",
-                speed === option
-                  ? "border-line-control bg-surface-raised text-fg"
-                  : "border-transparent text-fg-secondary hover:bg-surface-raised",
+                speed === option ? "text-fg" : "text-fg-secondary hover:bg-surface-raised",
               )}
             >
               {option}×
@@ -87,7 +98,7 @@ export function ReplayTransportView({ transport, onPlay, onPause, onSpeed, onSee
         disabled={locked === true}
         aria-label="Replay position"
         aria-valuetext={`${formatClock(elapsedS)} of ${formatClock(durationS)}`}
-        className="hidden h-1 w-40 accent-status-info frame:block"
+        className="hidden h-1 w-40 accent-accent frame:block"
       />
       <span className="num hidden whitespace-nowrap text-xs text-fg-muted sm:inline">
         {formatClock(elapsedS)} / {formatClock(durationS)}

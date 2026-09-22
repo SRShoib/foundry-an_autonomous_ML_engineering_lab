@@ -60,10 +60,21 @@
   --color-meter-critical: var(--meter-critical);
   --color-meter-projected: var(--meter-projected);
 
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+
+  --color-surface-glass: var(--surface-glass);
+  --color-surface-glass-border: var(--surface-glass-border);
+
   --radius-panel: var(--radius-panel);
   --radius-control: var(--radius-control);
   --radius-float: var(--radius-float);
   --radius-pill: var(--radius-pill);
+  --shadow-highlight: var(--shadow-highlight);
+  --shadow-hover: var(--shadow-hover);
+  --shadow-raised: var(--shadow-raised);
   --shadow-float: var(--shadow-float);
 
   --font-sans: var(--font-sans);

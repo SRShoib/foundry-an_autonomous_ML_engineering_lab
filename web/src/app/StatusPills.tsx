@@ -1,4 +1,5 @@
 import type { RunStatusKind } from "../api/types";
+import { cn } from "../lib/cn";
 import type { ConnectionState } from "../run/RunSource";
 
 /** Colour is never the only carrier of state (WCAG 1.4.1): every pill pairs its dot with a text
@@ -12,10 +13,14 @@ const RUN_STATUS: Record<RunStatusKind, { label: string; tone: string }> = {
   failed: { label: "failed", tone: "text-status-danger" },
 };
 
-function Pill({ tone, label, hint }: { tone: string; label: string; hint: string }) {
+/** `glow`: §7 M9g's one narrow, static (never pulsing) glow — reserved for "you are watching this
+ * happen right now", the single state the stream-health pill exists to answer. `var(--status-ok)`
+ * inside the arbitrary value is a token reference, not a literal colour, so it clears
+ * no-raw-colour. */
+function Pill({ tone, label, hint, glow = false }: { tone: string; label: string; hint: string; glow?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2 text-sm text-fg-secondary" title={hint}>
-      <span aria-hidden="true" className={`${tone} text-xs`}>
+      <span aria-hidden="true" className={cn(tone, "text-xs", glow && "drop-shadow-[0_0_6px_var(--status-ok)]")}>
         ●
       </span>
       <span>{label}</span>
@@ -62,5 +67,5 @@ export function StreamHealthPill({
   mode: "live" | "replay";
 }) {
   const { label, tone } = streamHealth(connection, mode);
-  return <Pill tone={tone} label={label} hint="stream health" />;
+  return <Pill tone={tone} label={label} hint="stream health" glow={mode === "live" && connection === "open"} />;
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { motion } from "motion/react";
 
 import { TopBar } from "./TopBar";
 
@@ -17,8 +18,16 @@ export function PageFrame({ title, children }: { title: string; children: ReactN
         <TopBar nav />
       </header>
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 bg-surface-deck px-4 py-6 frame:px-6">
-        <h1 className="mb-4 text-lg font-medium text-fg">{title}</h1>
-        <div className="flex flex-col gap-4">{children}</div>
+        {/* §7 M9g: a route enter transition — <MotionConfig reducedMotion="user"> (App.tsx) already
+            covers reduced-motion for every motion.* component, this one included. */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <h1 className="mb-4 text-lg font-medium text-fg">{title}</h1>
+          <div className="flex flex-col gap-4">{children}</div>
+        </motion.div>
       </main>
     </div>
   );
