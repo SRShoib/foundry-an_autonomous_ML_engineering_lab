@@ -65,6 +65,105 @@
         "title": "ActivityEvent",
         "type": "object"
       },
+      "AttemptRecord": {
+        "description": "M9d: one self-debug attempt (SPEC: \"runner self-debug max k=3\"), for the operator\nconsole's experiment drawer `attempts` tab \u2014 \"attempt 1 failed, 2 failed, 3 succeeded, each\nwith its error and what changed\". `outcome` mirrors the three ways\nfoundry/teams/experiment_runner.py's loop can end an attempt: a non-zero sandbox exit\n(`failed_execution`), an exit-0 run whose stdout has no parseable FOUNDRY_METRICS line\n(`failed_metrics`), or a clean parse (`success`).",
+        "properties": {
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "outcome": {
+            "enum": [
+              "success",
+              "failed_execution",
+              "failed_metrics"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "stderr": {
+            "title": "Stderr",
+            "type": "string"
+          },
+          "stdout": {
+            "title": "Stdout",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt",
+          "outcome",
+          "code",
+          "stdout",
+          "stderr",
+          "error"
+        ],
+        "title": "AttemptRecord",
+        "type": "object"
+      },
+      "AuditEvidence": {
+        "description": "M9d: the code-measured numbers behind one RedTeamFinding, carried as real fields rather\nthan embedded in `explanation` prose \u2014 CLAUDE.md's \"metrics computed by code, never estimated\nby an LLM\" applies to what the operator console renders too. Built from the same\nfoundry/tools/audit.py AuditReport (via foundry/teams/red_team.py's RedTeamContext) that\n`_apply_floor` already reads; attached to every finding a pass produces, `valid` verdicts\nincluded, since the measurement is what justifies a clearing verdict too. `worst_column` /\n`worst_column_target_auc` are None only when the audit found no column with a measurable\ntarget association (foundry/tools/audit.py: a non-numeric multiclass target has no median\nsplit, so every column's target_auc stays None).",
+        "properties": {
+          "duplicate_row_rate": {
+            "title": "Duplicate Row Rate",
+            "type": "number"
+          },
+          "reported_metric_name": {
+            "title": "Reported Metric Name",
+            "type": "string"
+          },
+          "reported_metric_value": {
+            "title": "Reported Metric Value",
+            "type": "number"
+          },
+          "worst_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worst Column"
+          },
+          "worst_column_target_auc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worst Column Target Auc"
+          }
+        },
+        "required": [
+          "worst_column",
+          "worst_column_target_auc",
+          "duplicate_row_rate",
+          "reported_metric_name",
+          "reported_metric_value"
+        ],
+        "title": "AuditEvidence",
+        "type": "object"
+      },
       "ColumnProfile": {
         "description": "Assembled by foundry/teams/data_team.py from RawColumnStats (measured) plus the LLM's\nProfileAssessment (which columns are potential leaks) \u2014 never returned directly by\nllm.structured(), so it is never registered in StubClient's schema registry.",
         "properties": {
@@ -154,6 +253,13 @@
       },
       "ExperimentResult": {
         "properties": {
+          "attempt_history": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptRecord"
+            },
+            "title": "Attempt History",
+            "type": "array"
+          },
           "attempts": {
             "default": 1,
             "title": "Attempts",
@@ -205,6 +311,16 @@
             ],
             "title": "Mlflow Run Id"
           },
+          "spec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExperimentSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "enum": [
               "success",
@@ -235,9 +351,68 @@
           "error",
           "code",
           "stdout",
-          "stderr"
+          "stderr",
+          "spec",
+          "attempt_history"
         ],
         "title": "ExperimentResult",
+        "type": "object"
+      },
+      "ExperimentSpec": {
+        "properties": {
+          "est_cost_usd": {
+            "title": "Est Cost Usd",
+            "type": "number"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "hyperparams": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Hyperparams",
+            "type": "object"
+          },
+          "model_family": {
+            "enum": [
+              "logistic_regression",
+              "random_forest",
+              "gradient_boosting",
+              "xgboost",
+              "lightgbm",
+              "mlp"
+            ],
+            "title": "Model Family",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "model_family",
+          "hyperparams",
+          "rationale",
+          "est_cost_usd"
+        ],
+        "title": "ExperimentSpec",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -345,6 +520,13 @@
             "title": "N Invalidated",
             "type": "integer"
           },
+          "pending_specs": {
+            "items": {
+              "$ref": "#/components/schemas/PendingSpecCost"
+            },
+            "title": "Pending Specs",
+            "type": "array"
+          },
           "projected_usd": {
             "default": 0.0,
             "title": "Projected Usd",
@@ -373,9 +555,34 @@
           "best_experiment_id",
           "best_metric_name",
           "best_metric_value",
-          "n_invalidated"
+          "n_invalidated",
+          "pending_specs"
         ],
         "title": "PendingApproval",
+        "type": "object"
+      },
+      "PendingSpecCost": {
+        "description": "M9d: one pending ExperimentSpec's identity plus its PROJECTED cost (foundry/tools/cost.py's\nproject_run_usd \u2014 max(mean completed cost, the spec's own est_cost_usd), never est_cost_usd\nalone), for the budget gate's \"pending exp-005 lightgbm $2.10\" rows (design-plan.md \u00a76). Not\nmsgpack-allowlisted: it only ever travels inside an ApprovalRequest/PendingApproval dumped\nwith model_dump(mode=\"json\") for interrupt(), never held directly in FoundryState.",
+        "properties": {
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "model_family": {
+            "title": "Model Family",
+            "type": "string"
+          },
+          "projected_cost_usd": {
+            "title": "Projected Cost Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "model_family",
+          "projected_cost_usd"
+        ],
+        "title": "PendingSpecCost",
         "type": "object"
       },
       "RedTeamFinding": {
@@ -391,6 +598,16 @@
             ],
             "title": "Category",
             "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuditEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "experiment_id": {
             "title": "Experiment Id",
@@ -418,7 +635,8 @@
           "category",
           "verdict",
           "explanation",
-          "recommendation"
+          "recommendation",
+          "evidence"
         ],
         "title": "RedTeamFinding",
         "type": "object"

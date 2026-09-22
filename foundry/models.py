@@ -181,6 +181,26 @@ class RedTeamVerdict(BaseModel):
     recommendation: str
 
 
+class AuditEvidence(BaseModel):
+    """M9d: the code-measured numbers behind one RedTeamFinding, carried as real fields rather
+    than embedded in `explanation` prose — CLAUDE.md's "metrics computed by code, never estimated
+    by an LLM" applies to what the operator console renders too. Built from the same
+    foundry/tools/audit.py AuditReport (via foundry/teams/red_team.py's RedTeamContext) that
+    `_apply_floor` already reads; attached to every finding a pass produces, `valid` verdicts
+    included, since the measurement is what justifies a clearing verdict too. `worst_column` /
+    `worst_column_target_auc` are None only when the audit found no column with a measurable
+    target association (foundry/tools/audit.py: a non-numeric multiclass target has no median
+    split, so every column's target_auc stays None)."""
+
+    model_config = WIRE_CONFIG
+
+    worst_column: str | None = None
+    worst_column_target_auc: float | None = None
+    duplicate_row_rate: float
+    reported_metric_name: str
+    reported_metric_value: float
+
+
 class RedTeamFinding(BaseModel):
     """Code-assembled record (foundry/teams/red_team.py) of one RedTeamVerdict plus the
     experiment_id it was rendered against — the unit foundry/state.py's `invalidations`
@@ -194,6 +214,9 @@ class RedTeamFinding(BaseModel):
     verdict: Literal["valid", "invalidated"]
     explanation: str
     recommendation: str
+    # M9d: default None so a pre-M9d checkpoint (msgpack-allowlisted, see foundry/graph.py) still
+    # deserializes.
+    evidence: AuditEvidence | None = None
 
 
 # --------------------------------------------------------------------------------------------
@@ -243,6 +266,24 @@ class SandboxResult(BaseModel):
     artifacts: dict[str, bytes] = Field(default_factory=dict)
 
 
+class AttemptRecord(BaseModel):
+    """M9d: one self-debug attempt (SPEC: "runner self-debug max k=3"), for the operator
+    console's experiment drawer `attempts` tab — "attempt 1 failed, 2 failed, 3 succeeded, each
+    with its error and what changed". `outcome` mirrors the three ways
+    foundry/teams/experiment_runner.py's loop can end an attempt: a non-zero sandbox exit
+    (`failed_execution`), an exit-0 run whose stdout has no parseable FOUNDRY_METRICS line
+    (`failed_metrics`), or a clean parse (`success`)."""
+
+    model_config = WIRE_CONFIG
+
+    attempt: int
+    outcome: Literal["success", "failed_execution", "failed_metrics"]
+    code: str
+    stdout: str
+    stderr: str
+    error: str | None = None
+
+
 class ExperimentResult(BaseModel):
     model_config = WIRE_CONFIG
     experiment_id: str
@@ -251,7 +292,10 @@ class ExperimentResult(BaseModel):
     metrics: dict[str, float] = Field(default_factory=dict)
     cost_usd: float
     duration_s: float
-    attempts: int = 1  # self-debug attempts consumed (SPEC: "runner self-debug max k=3")
+    # Self-debug attempts consumed (SPEC: "runner self-debug max k=3"). Equal to
+    # len(attempt_history) for anything recorded from M9d on; kept as its own field rather than
+    # derived because a pre-M9d checkpoint has this count but no history.
+    attempts: int = 1
     error: str | None = None
     # M9b: what the operator console's experiment drawer shows. The LAST attempt's script and its
     # tail-truncated sandbox output (foundry/config.py's experiment_output_chars). All three
@@ -260,6 +304,11 @@ class ExperimentResult(BaseModel):
     code: str = ""
     stdout: str = ""
     stderr: str = ""
+    # M9d: the spec that produced this result (drawer `spec` tab) and every self-debug attempt,
+    # not just the last (drawer `attempts` tab). Both default to None/[] for the same
+    # pre-M9d-checkpoint reason as code/stdout/stderr above.
+    spec: ExperimentSpec | None = None
+    attempt_history: list[AttemptRecord] = Field(default_factory=list)
 
 
 class LeaderboardEntry(BaseModel):
@@ -276,6 +325,18 @@ class HumanDecision(BaseModel):
     approved: bool
     note: str = ""
     timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class PendingSpecCost(BaseModel):
+    """M9d: one pending ExperimentSpec's identity plus its PROJECTED cost (foundry/tools/cost.py's
+    project_run_usd — max(mean completed cost, the spec's own est_cost_usd), never est_cost_usd
+    alone), for the budget gate's "pending exp-005 lightgbm $2.10" rows (design-plan.md §6). Not
+    msgpack-allowlisted: it only ever travels inside an ApprovalRequest/PendingApproval dumped
+    with model_dump(mode="json") for interrupt(), never held directly in FoundryState."""
+
+    experiment_id: str
+    model_family: str
+    projected_cost_usd: float
 
 
 class ApprovalRequest(BaseModel):
@@ -295,6 +356,9 @@ class ApprovalRequest(BaseModel):
     best_metric_value: float | None = None
     n_invalidated: int = 0
     report_md: str | None = None
+    # M9d: the specs behind `projected_usd`, for the budget gate only — always [] for the final
+    # gate, which has no pending batch to show.
+    pending_specs: list[PendingSpecCost] = Field(default_factory=list)
 
 
 class HumanResponse(BaseModel):

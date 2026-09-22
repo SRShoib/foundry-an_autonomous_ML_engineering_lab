@@ -102,9 +102,9 @@ def test_experiment_result_no_longer_accepts_invalidated_as_a_status() -> None:
 
 
 def test_experiment_result_output_fields_default_so_old_checkpoints_still_deserialize() -> None:
-    """M9b added code/stdout/stderr. ExperimentResult is msgpack-allowlisted in
-    foundry/graph.py, so a Postgres checkpoint written before these fields existed carries a
-    payload without them and must still validate."""
+    """M9b added code/stdout/stderr; M9d added spec/attempt_history. ExperimentResult is
+    msgpack-allowlisted in foundry/graph.py, so a Postgres checkpoint written before either
+    generation of fields existed carries a payload without them and must still validate."""
     old_payload = {
         "experiment_id": "exp-1",
         "mlflow_run_id": "abc",
@@ -117,6 +117,22 @@ def test_experiment_result_output_fields_default_so_old_checkpoints_still_deseri
     }
     result = ExperimentResult.model_validate(old_payload)
     assert (result.code, result.stdout, result.stderr) == ("", "", "")
+    assert result.spec is None
+    assert result.attempt_history == []
+
+
+def test_red_team_finding_evidence_defaults_so_pre_m9d_checkpoints_still_deserialize() -> None:
+    """M9d added `evidence`. RedTeamFinding is msgpack-allowlisted in foundry/graph.py, so a
+    checkpoint written before this field existed carries a payload without it."""
+    old_payload = {
+        "experiment_id": "exp-1",
+        "category": "leakage",
+        "verdict": "invalidated",
+        "explanation": "e",
+        "recommendation": "r",
+    }
+    finding = RedTeamFinding.model_validate(old_payload)
+    assert finding.evidence is None
 
 
 def test_red_team_verdict_rejects_unknown_category() -> None:

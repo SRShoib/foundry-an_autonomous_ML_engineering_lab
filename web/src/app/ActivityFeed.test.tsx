@@ -149,4 +149,19 @@ describe("ActivityFeed", () => {
     expect(container.scrollTop).toBe(1000);
     expect(screen.queryByRole("button", { name: /live/ })).not.toBeInTheDocument();
   });
+
+  it("holdFollow stops auto-scroll and hides the live control without touching following itself", () => {
+    const { rerender } = render(
+      <Harness events={events(1)} batchSize={1} ratePerSecond={0} connected holdFollow />,
+    );
+    const container = screen.getByTestId("scroll-container");
+    setScrollShape(container, { scrollHeight: 500 });
+
+    rerender(<Harness events={events(2)} batchSize={1} ratePerSecond={0} connected holdFollow />);
+    expect(container.scrollTop).toBe(0); // no auto-scroll while held
+    expect(screen.queryByRole("button", { name: /live/ })).not.toBeInTheDocument(); // still following, just held
+
+    rerender(<Harness events={events(3)} batchSize={1} ratePerSecond={0} connected />);
+    expect(container.scrollTop).toBe(500); // resumes exactly where following left off
+  });
 });
