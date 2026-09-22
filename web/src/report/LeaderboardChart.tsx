@@ -19,7 +19,17 @@ export function LeaderboardChart({ leaderboard }: { leaderboard: readonly Leader
 
   return (
     <figure className="my-6 flex flex-col gap-2">
-      <BarChart width={WIDTH} height={HEIGHT} data={sorted} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+      {/* Fixed 640×200 internal geometry (see the docstring above), but `max-w-full` on the
+       * generated .recharts-wrapper stops it overflowing the 375–390px mobile column: the wrapper's
+       * own `viewBox` on its <svg> scales the whole drawing down uniformly once its box shrinks, so
+       * nothing about the deterministic width/height passed to BarChart itself changes. */}
+      <BarChart
+        width={WIDTH}
+        height={HEIGHT}
+        data={sorted}
+        margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+        className="max-w-full"
+      >
         <CartesianGrid stroke="var(--line-hairline)" vertical={false} />
         <XAxis
           dataKey="experiment_id"

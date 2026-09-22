@@ -15,6 +15,13 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env["CI"]),
   retries: process.env["CI"] ? 1 : 0,
+  // replayRunSource schedules ticks against the real wall clock (by design: see its own docstring
+  // on why elapsed() is recomputed from performance.now() rather than accumulated timer intervals).
+  // That self-heals against a SLOW tick, but a worker count sized to this machine's core count runs
+  // enough concurrent Chromium instances to starve the main thread badly enough that 15s assertion
+  // budgets expire before a 16x replay reaches its next gate. CI gets one worker; local keeps some
+  // parallelism without full oversubscription.
+  workers: process.env["CI"] ? 1 : 4,
   reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {
     baseURL: "http://localhost:5173",
