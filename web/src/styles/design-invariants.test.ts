@@ -32,7 +32,7 @@ describe("each design rule actually fires on a bad sample", () => {
     "no-raw-colour": 'const c = "#1a2b3c"; .x { color: rgb(1 2 3); background: hsl(0 0% 0%) }',
     "focus-never-suppressed": ".x:focus { outline: none } <a className='focus:outline-none' />",
     "no-tracked-out-caps": '<h2 className="uppercase tracking-widest"> .x { letter-spacing: 0.2em }',
-    "one-shadow": '<div className="shadow-lg"> .x { box-shadow: 0 1px 3px black }',
+    "shadows-are-tokenized": '<div className="shadow-lg"> .x { box-shadow: 0 1px 3px black }',
     "weights-stop-at-600": '<b className="font-bold"> .x { font-weight: 700 }',
   };
 
@@ -61,8 +61,9 @@ describe("each design rule leaves the allowed forms alone", () => {
     const good = [
       "background: var(--surface-panel); color: var(--text-primary);",
       "box-shadow: var(--shadow-float);",
+      "box-shadow: var(--shadow-raised);",
       "letter-spacing: 0.01em; font-weight: 600;",
-      'className="bg-surface-panel text-fg font-medium shadow-float focus-visible:ring-2"',
+      'className="bg-surface-panel text-fg font-medium shadow-float hover:shadow-hover focus-visible:ring-2"',
       "id=\"#root\"; const url = '#/components/schemas/RunStatus';",
     ].join("\n");
     expect(violations(good)).toEqual([]);

@@ -23,7 +23,10 @@ export function EvalTable({ results }: { results: readonly TaskResult[] }) {
         </thead>
         <tbody>
           {full.map((row) => (
-            <tr key={row.dataset_ref} className="border-b border-line-hairline last:border-b-0">
+            <tr
+              key={row.dataset_ref}
+              className="border-b border-line-hairline transition-colors duration-(--dur-quick) ease-out last:border-b-0 hover:bg-surface-raised"
+            >
               <td className="py-2 pr-3 text-fg">{row.dataset_ref}</td>
               <td className="py-2 pr-3 text-fg-secondary">{row.primary_metric_name}</td>
               <td className="num py-2 pr-3 text-fg">

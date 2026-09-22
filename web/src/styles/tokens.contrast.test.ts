@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { contrastRatio } from "./contrast";
 import {
+  BESPOKE_CONTRAST_TOKENS,
   DECORATIVE_TOKENS,
   GRAPHIC_FLOOR,
   GRAPHIC_TOKENS,
@@ -19,7 +20,7 @@ const { dark, light } = readTokens();
 const themes = { dark, light } as const;
 
 const CHECKED = new Set<string>([...SURFACES, ...TEXT_TOKENS, ...GRAPHIC_TOKENS]);
-const EXEMPT = new Set<string>(DECORATIVE_TOKENS);
+const EXEMPT = new Set<string>([...DECORATIVE_TOKENS, ...BESPOKE_CONTRAST_TOKENS]);
 
 describe("token classification", () => {
   it("places every colour token in exactly one contrast group", () => {
@@ -123,5 +124,21 @@ describe("the figures design-plan §3 quotes", () => {
   it("keeps --status-danger identical to --team-redteam: invalidation IS the danger state", () => {
     expect(dark["status-danger"]).toBe(dark["team-redteam"]);
     expect(light["status-danger"]).toBe(light["team-redteam"]);
+  });
+});
+
+describe("M9g's accent", () => {
+  // --accent is a GRAPHIC_TOKEN, checked against the five grounds by the describe.each loop above
+  // like every other graphic token. What that loop can't check: --accent-contrast is only ever
+  // read as a label SITTING ON a filled --accent surface, never on one of the five grounds
+  // directly, so it needs its own pair rather than the standard surface loop.
+  it.each(["dark", "light"] as const)("holds --accent-contrast at >= %s theme's 4.5:1 text floor against --accent", (theme) => {
+    const tokens = themes[theme];
+    expect(contrastRatio(tokens["accent-contrast"] ?? "", tokens["accent"] ?? "")).toBeGreaterThanOrEqual(TEXT_FLOOR);
+  });
+
+  it("holds dark --accent at its computed 3.17:1 worst case on --surface-raised", () => {
+    const ratios = SURFACES.map((surface) => contrastRatio(dark["accent"] ?? "", dark[surface] ?? ""));
+    expect(Math.min(...ratios)).toBeCloseTo(3.17, 1);
   });
 });

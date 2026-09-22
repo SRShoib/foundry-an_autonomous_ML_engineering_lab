@@ -1,4 +1,5 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useId, useRef, type KeyboardEvent } from "react";
+import { motion } from "motion/react";
 
 export interface Tab<T extends string> {
   id: T;
@@ -18,6 +19,12 @@ interface TabsProps<T extends string> {
   className?: string;
   /** Per-tab classes, given whether that tab is the selected one. */
   tabClassName: (selected: boolean) => string;
+  /** §7 M9g interaction motion: "the selected-tab underline is a layoutId-shared element that
+   * slides between tabs" — the same shared-layout technique GateDialog/BudgetMeter's hero-value
+   * fly already uses, not new machinery. Off by default since not every Tabs consumer wants it.
+   * `useId` scopes the shared id to THIS Tabs instance, so two mounted at once (mobile tabs behind
+   * an open drawer) never fight over one indicator. */
+  indicator?: boolean;
 }
 
 /** The ARIA tabs primitive (SPEC: "Radix UI primitives for accessible dialogs/menus" — extended
@@ -26,8 +33,9 @@ interface TabsProps<T extends string> {
  * select as they go. Originally app/MobileTabs.tsx's own logic; extracted so the experiment
  * drawer's `spec`/`code`/`output`/`attempts` tabs (M9d) get the same keyboard behaviour without a
  * second implementation to keep in sync. */
-export function Tabs<T extends string>({ tabs, active, onChange, label, className, tabClassName }: TabsProps<T>) {
+export function Tabs<T extends string>({ tabs, active, onChange, label, className, tabClassName, indicator = false }: TabsProps<T>) {
   const refs = useRef(new Map<T, HTMLButtonElement>());
+  const indicatorId = useId();
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     const index = tabs.findIndex((tab) => tab.id === active);
@@ -63,9 +71,17 @@ export function Tabs<T extends string>({ tabs, active, onChange, label, classNam
             aria-controls={panelId(tab.id)}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.id)}
-            className={tabClassName(selected)}
+            className={`relative ${tabClassName(selected)}`}
           >
             {tab.label}
+            {indicator && selected && (
+              <motion.span
+                aria-hidden="true"
+                layoutId={indicatorId}
+                className="absolute inset-x-0 bottom-0 h-0.5 bg-accent"
+                transition={{ duration: 0.24, ease: [0.65, 0, 0.35, 1] }}
+              />
+            )}
           </button>
         );
       })}

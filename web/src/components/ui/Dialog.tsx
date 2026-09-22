@@ -34,11 +34,16 @@ interface DialogProps {
   children: ReactNode;
 }
 
+// §3.3 M9g: the float layer's own material — --surface-glass/-glass-border (translucency, alpha
+// >=0.84) plus a native Tailwind backdrop-blur (never reset by theme.css's @theme block, which
+// only zeroes --color-*/--text-*/--font-*/--radius-*/--shadow-*/--ease-*/--tracking-*) in place of
+// the flat --surface-raised fill these two variants used before. --shadow-float itself is now the
+// layered contact-plus-cast shadow token (tokens.css).
 const VARIANT_CLASS: Record<DialogProps["variant"], string> = {
   centered:
-    "fixed left-1/2 top-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 rounded-float border border-line-strong bg-surface-raised shadow-float",
+    "fixed left-1/2 top-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 rounded-float border border-surface-glass-border bg-surface-glass shadow-float backdrop-blur-md",
   sheet:
-    "fixed inset-y-0 right-0 z-50 flex w-[min(100vw,560px)] flex-col border-l border-line-strong bg-surface-raised shadow-float",
+    "fixed inset-y-0 right-0 z-50 flex w-[min(100vw,560px)] flex-col border-l border-surface-glass-border bg-surface-glass shadow-float backdrop-blur-md",
 };
 
 const DEFAULT_PANEL_TRANSITION: NonNullable<DialogProps["panelTransition"]> = {

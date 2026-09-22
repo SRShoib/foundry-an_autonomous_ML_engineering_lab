@@ -1,9 +1,18 @@
 import type { RunStatus } from "../api/types";
 import { formatMetric } from "../lib/format";
+import { useAnimatedNumber } from "../lib/useAnimatedNumber";
 import { extractHeadings } from "./headings";
 import { LeaderboardChart } from "./LeaderboardChart";
 import { Markdown } from "./Markdown";
 import { ReportToc } from "./ReportToc";
+
+/** §7's pre-existing "Metric values: 400ms count-up on change" rule, simply never wired to this
+ * particular number before — the report's hero figure is exactly the kind of metric value that
+ * rule describes, not a new M9g behaviour. */
+function HeroMetric({ value }: { value: number }) {
+  const animated = useAnimatedNumber(value);
+  return <p className="num text-display text-fg">{formatMetric(animated)}</p>;
+}
 
 /** docs/design-plan.md §6: "final report + model card as rendered markdown with plots ... single
  * centred column in Newsreader, 680px measure, sticky mini-TOC ... at 1100px and up." The TOC is
@@ -20,7 +29,7 @@ export function ReportBody({ status, reportMd }: { status: RunStatus; reportMd: 
       <div className="min-w-0 flex-1">
         {best !== undefined && (
           <div className="mb-2">
-            <p className="num text-display text-fg">{formatMetric(best.primary_metric_value)}</p>
+            <HeroMetric value={best.primary_metric_value} />
             <p className="text-xs text-fg-muted">
               {best.primary_metric_name} · {best.experiment_id}
             </p>

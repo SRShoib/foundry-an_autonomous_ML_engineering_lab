@@ -23,12 +23,11 @@ export function MobileTabs<T extends string>({ tabs, active, onChange, label }: 
       className="flex border-b border-line-hairline bg-surface-deck frame:hidden"
       tabClassName={(selected) =>
         cn(
-          "min-h-11 flex-1 border-b-2 px-3 text-sm",
-          selected
-            ? "border-line-focus font-medium text-fg"
-            : "border-transparent text-fg-secondary hover:text-fg",
+          "min-h-11 flex-1 px-3 text-sm transition-colors duration-(--dur-quick) ease-out",
+          selected ? "font-medium text-fg" : "text-fg-secondary hover:text-fg",
         )
       }
+      indicator
     />
   );
 }
