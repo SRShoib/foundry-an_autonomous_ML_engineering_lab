@@ -10,6 +10,7 @@ import { ThemeProvider } from "./app/ThemeProvider";
 import { EvalRoute } from "./routes/EvalRoute";
 import { LiveRunRoute } from "./routes/LiveRunRoute";
 import { NotFoundRoute } from "./routes/NotFoundRoute";
+import { ReplayReportRoute } from "./routes/ReplayReportRoute";
 import { ReplayRoute } from "./routes/ReplayRoute";
 import { ReportRoute } from "./routes/ReportRoute";
 import { RunsHomeRoute } from "./routes/RunsHomeRoute";
@@ -46,6 +47,7 @@ export function AppRoutes() {
       <Route path={ROUTES.runs} element={<RunsHomeRoute />} />
       <Route path={ROUTES.run} element={<LiveRunRoute />} />
       <Route path={ROUTES.report} element={<ReportRoute />} />
+      <Route path={ROUTES.replayReport} element={<ReplayReportRoute />} />
       <Route path={ROUTES.replay} element={<ReplayRoute />} />
       <Route path={ROUTES.eval} element={<EvalRoute />} />
       <Route path="*" element={<NotFoundRoute />} />

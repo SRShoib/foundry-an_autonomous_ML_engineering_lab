@@ -7,6 +7,7 @@ import { shortId } from "../lib/format";
 import { createLiveRunSource } from "../run/liveRunSource";
 import { RunSourceProvider } from "../run/RunSourceContext";
 import { useManagedRunSource } from "../run/useRunSource";
+import { links } from "./routes";
 import { RunView } from "./RunView";
 
 export function LiveRunRoute() {
@@ -27,7 +28,7 @@ export function LiveRunRoute() {
 
   return (
     <RunSourceProvider source={source}>
-      <RunView meta={[{ label: "run", value: shortId(threadId) }]} />
+      <RunView meta={[{ label: "run", value: shortId(threadId) }]} reportHref={links.report(threadId)} />
     </RunSourceProvider>
   );
 }

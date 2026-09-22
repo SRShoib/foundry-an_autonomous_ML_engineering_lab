@@ -5,6 +5,7 @@ export const ROUTES = {
   runs: "/runs",
   run: "/runs/:threadId",
   report: "/runs/:threadId/report",
+  replayReport: "/replay/:name/report",
   replay: "/replay/:name",
   eval: "/eval",
 } as const;
@@ -13,6 +14,7 @@ export const links = {
   run: (threadId: string): string => `/runs/${encodeURIComponent(threadId)}`,
   report: (threadId: string): string => `/runs/${encodeURIComponent(threadId)}/report`,
   replay: (name: string): string => `/replay/${encodeURIComponent(name)}`,
+  replayReport: (name: string): string => `/replay/${encodeURIComponent(name)}/report`,
 } as const;
 
 /** The recording SPEC M9 requires: the red team catching the booby-trapped dataset. Committed under
