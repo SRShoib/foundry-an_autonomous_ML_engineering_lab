@@ -129,6 +129,20 @@ def test_status_rehydrates_a_completed_thread_with_no_handle() -> None:
     assert status.error is None
 
 
+def test_a_checkpoint_only_thread_still_projects_goal_dataset_and_updated_at() -> None:
+    """M9e: goal/dataset_ref/updated_at (docs/design-plan.md §6's runs-home columns) must survive
+    exactly the same restart that test_status_rehydrates_a_completed_thread_with_no_handle proves
+    for report_md — they come from the same checkpointed FoundryState / StateSnapshot, projected
+    with no live RunHandle in this process."""
+    saver, store = InMemorySaver(), InMemoryStore()
+    thread_id = _start_and_wait_for_the_final_gate(_manager(saver, store))
+
+    status = _manager(saver, store).status(thread_id)
+    assert status.goal == "predict churn"
+    assert status.dataset_ref == "churn"
+    assert status.updated_at is not None
+
+
 def test_thread_ids_includes_persisted_threads_after_a_restart() -> None:
     saver, store = InMemorySaver(), InMemoryStore()
     before_restart = _manager(saver, store)

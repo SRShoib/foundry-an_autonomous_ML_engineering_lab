@@ -14,7 +14,7 @@ export function PageFrame({ title, children }: { title: string; children: ReactN
         Skip to main content
       </a>
       <header>
-        <TopBar />
+        <TopBar nav />
       </header>
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 bg-surface-deck px-4 py-6 frame:px-6">
         <h1 className="mb-4 text-lg font-medium text-fg">{title}</h1>

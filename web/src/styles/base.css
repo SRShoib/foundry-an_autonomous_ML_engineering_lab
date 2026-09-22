@@ -92,3 +92,77 @@
 @utility meter-hatch {
   background-image: repeating-linear-gradient(45deg, var(--meter-projected) 0 4px, transparent 4px 8px);
 }
+
+/* §4/§6: the report view and model card's prose (report/Markdown.tsx renders bare markdown tags,
+   not a components map per element, so styling lives here as descendant selectors). Newsreader
+   stops at weight 500 — only 400/500 are self-hosted (styles/fonts.css) — matching §4's "weights
+   stop at 600; there is no 700 anywhere". Max width is the 680px measure of docs/design-plan.md
+   §6; centring is the caller's job (report/ReportRoute.tsx positions it beside the TOC). */
+@utility doc {
+  max-width: 42.5rem;
+  font-family: var(--font-serif);
+  font-size: var(--text-doc-body);
+  line-height: var(--text-doc-body--lh);
+  color: var(--text-primary);
+
+  & :is(h1, h2, h3) {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  & h1 {
+    font-size: var(--text-doc-h1);
+    line-height: var(--text-doc-h1--lh);
+    margin: 0 0 var(--space-4);
+  }
+  & h2 {
+    font-size: var(--text-doc-h2);
+    line-height: var(--text-doc-h2--lh);
+    margin: var(--space-6) 0 var(--space-3);
+    scroll-margin-top: var(--space-5); /* clears the sticky top bar when a TOC link jumps here */
+  }
+  & h3 {
+    font-size: var(--text-doc-h3);
+    line-height: var(--text-doc-h3--lh);
+    margin: var(--space-5) 0 var(--space-2);
+  }
+  & p {
+    margin: 0 0 var(--space-4);
+  }
+  & strong {
+    font-weight: 500;
+  }
+  & :is(ul, ol) {
+    margin: 0 0 var(--space-4);
+    padding-left: var(--space-5);
+  }
+  & li {
+    margin-bottom: var(--space-1);
+  }
+  & hr {
+    margin: var(--space-7) 0;
+    border: none;
+    border-top: 1px solid var(--line-hairline);
+  }
+
+  /* Every measured value (metric, usd, mlflow run id) is Plex Mono — the `num` utility's own rule
+     (§4), reapplied here because a GFM table's cells are plain <td>s, not `.num` spans. */
+  & table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--text-doc-caption);
+    line-height: var(--text-doc-caption--lh);
+    font-variant-numeric: tabular-nums;
+  }
+  & :is(th, td) {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--line-hairline);
+    text-align: left;
+  }
+  & th {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+}

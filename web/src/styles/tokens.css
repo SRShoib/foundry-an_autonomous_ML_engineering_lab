@@ -96,6 +96,21 @@
   --text-display: 2.75rem;
   --text-display--lh: 3rem;
 
+  /* §4 report prose scale (Newsreader), confined to the report view and model card (M9e):
+     "body 17 / 28, caption 15 / 24, headings 28 / 22 / 18". Consumed directly by the `doc` utility
+     (base.css) via descendant selectors — react-markdown renders bare h1/h2/h3/p/table tags
+     (report/Markdown.tsx), not Tailwind classes per element. */
+  --text-doc-h1: 1.75rem;
+  --text-doc-h1--lh: 2.25rem;
+  --text-doc-h2: 1.375rem;
+  --text-doc-h2--lh: 1.75rem;
+  --text-doc-h3: 1.125rem;
+  --text-doc-h3--lh: 1.5rem;
+  --text-doc-body: 1.0625rem;
+  --text-doc-body--lh: 1.75rem;
+  --text-doc-caption: 0.9375rem;
+  --text-doc-caption--lh: 1.5rem;
+
   /* No tracking token above 0.01em: tracked-out caps cannot be reintroduced casually (§4). */
   --tracking-normal: 0em;
   --tracking-numeric: 0.01em;
