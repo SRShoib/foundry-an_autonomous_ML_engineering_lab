@@ -35,8 +35,15 @@ function Tick({ at }: { at: number }) {
 
 /** The dock's budget panel (§5 / §7). The bar is never the only carrier of its value — a numeric
  * readout always sits beside it (§3.1) — and the readout counts up rather than jumping (§7's
- * "Metric values" moment, via useAnimatedNumber). */
-export function BudgetMeter({ status }: { status: RunStatus | null }) {
+ * "Metric values" moment, via useAnimatedNumber).
+ *
+ * `heroLayoutId`, when given, lets this readout CLAIM GateDialog.tsx's shared layoutId
+ * (GATE_HERO_LAYOUT_ID) once the budget gate dialog is no longer holding it — the two never carry
+ * the same id while both are mounted (RunView only passes it once `gate` is not a budget gate),
+ * so Motion's shared-layout system sees a clean unmount-then-remount handoff and flies the value
+ * from the dialog's position into this one (§7's gate-confirm "fly"), rather than two elements
+ * disputing one id. */
+export function BudgetMeter({ status, heroLayoutId }: { status: RunStatus | null; heroLayoutId?: string }) {
   // Hooks run unconditionally, before the null check below: this component's `status` prop starts
   // null and later receives a value on the SAME mounted instance (the query resolving, or the first
   // SSE frame arriving), and the Rules of Hooks forbid a hook that only starts being called once
@@ -70,7 +77,9 @@ export function BudgetMeter({ status }: { status: RunStatus | null }) {
   return (
     <Panel title="budget" meta={<span className="num">{formatUsd(cap)}</span>}>
       <div className="flex flex-col gap-3">
-        <p className="num text-xl text-fg">{formatUsd(animatedSpent)}</p>
+        <motion.p {...(heroLayoutId ? { layoutId: heroLayoutId } : {})} className="num text-xl text-fg">
+          {formatUsd(animatedSpent)}
+        </motion.p>
 
         <div
           role="progressbar"

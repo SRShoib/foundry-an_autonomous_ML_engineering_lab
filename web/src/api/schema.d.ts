@@ -186,6 +186,56 @@ export interface components {
             ts: string;
         };
         /**
+         * AttemptRecord
+         * @description M9d: one self-debug attempt (SPEC: "runner self-debug max k=3"), for the operator
+         *     console's experiment drawer `attempts` tab — "attempt 1 failed, 2 failed, 3 succeeded, each
+         *     with its error and what changed". `outcome` mirrors the three ways
+         *     foundry/teams/experiment_runner.py's loop can end an attempt: a non-zero sandbox exit
+         *     (`failed_execution`), an exit-0 run whose stdout has no parseable FOUNDRY_METRICS line
+         *     (`failed_metrics`), or a clean parse (`success`).
+         */
+        AttemptRecord: {
+            /** Attempt */
+            attempt: number;
+            /** Code */
+            code: string;
+            /** Error */
+            error: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "success" | "failed_execution" | "failed_metrics";
+            /** Stderr */
+            stderr: string;
+            /** Stdout */
+            stdout: string;
+        };
+        /**
+         * AuditEvidence
+         * @description M9d: the code-measured numbers behind one RedTeamFinding, carried as real fields rather
+         *     than embedded in `explanation` prose — CLAUDE.md's "metrics computed by code, never estimated
+         *     by an LLM" applies to what the operator console renders too. Built from the same
+         *     foundry/tools/audit.py AuditReport (via foundry/teams/red_team.py's RedTeamContext) that
+         *     `_apply_floor` already reads; attached to every finding a pass produces, `valid` verdicts
+         *     included, since the measurement is what justifies a clearing verdict too. `worst_column` /
+         *     `worst_column_target_auc` are None only when the audit found no column with a measurable
+         *     target association (foundry/tools/audit.py: a non-numeric multiclass target has no median
+         *     split, so every column's target_auc stays None).
+         */
+        AuditEvidence: {
+            /** Duplicate Row Rate */
+            duplicate_row_rate: number;
+            /** Reported Metric Name */
+            reported_metric_name: string;
+            /** Reported Metric Value */
+            reported_metric_value: number;
+            /** Worst Column */
+            worst_column: string | null;
+            /** Worst Column Target Auc */
+            worst_column_target_auc: number | null;
+        };
+        /**
          * ColumnProfile
          * @description Assembled by foundry/teams/data_team.py from RawColumnStats (measured) plus the LLM's
          *     ProfileAssessment (which columns are potential leaks) — never returned directly by
@@ -231,6 +281,8 @@ export interface components {
         };
         /** ExperimentResult */
         ExperimentResult: {
+            /** Attempt History */
+            attempt_history: components["schemas"]["AttemptRecord"][];
             /**
              * Attempts
              * @default 1
@@ -255,6 +307,7 @@ export interface components {
             };
             /** Mlflow Run Id */
             mlflow_run_id: string | null;
+            spec: components["schemas"]["ExperimentSpec"] | null;
             /**
              * Status
              * @enum {string}
@@ -270,6 +323,24 @@ export interface components {
              * @default
              */
             stdout: string;
+        };
+        /** ExperimentSpec */
+        ExperimentSpec: {
+            /** Est Cost Usd */
+            est_cost_usd: number;
+            /** Experiment Id */
+            experiment_id: string;
+            /** Hyperparams */
+            hyperparams: {
+                [key: string]: number | string | boolean;
+            };
+            /**
+             * Model Family
+             * @enum {string}
+             */
+            model_family: "logistic_regression" | "random_forest" | "gradient_boosting" | "xgboost" | "lightgbm" | "mlp";
+            /** Rationale */
+            rationale: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -309,6 +380,8 @@ export interface components {
              * @default 0
              */
             n_invalidated: number;
+            /** Pending Specs */
+            pending_specs: components["schemas"]["PendingSpecCost"][];
             /**
              * Projected Usd
              * @default 0
@@ -322,6 +395,22 @@ export interface components {
             thread_id: string;
         };
         /**
+         * PendingSpecCost
+         * @description M9d: one pending ExperimentSpec's identity plus its PROJECTED cost (foundry/tools/cost.py's
+         *     project_run_usd — max(mean completed cost, the spec's own est_cost_usd), never est_cost_usd
+         *     alone), for the budget gate's "pending exp-005 lightgbm $2.10" rows (design-plan.md §6). Not
+         *     msgpack-allowlisted: it only ever travels inside an ApprovalRequest/PendingApproval dumped
+         *     with model_dump(mode="json") for interrupt(), never held directly in FoundryState.
+         */
+        PendingSpecCost: {
+            /** Experiment Id */
+            experiment_id: string;
+            /** Model Family */
+            model_family: string;
+            /** Projected Cost Usd */
+            projected_cost_usd: number;
+        };
+        /**
          * RedTeamFinding
          * @description Code-assembled record (foundry/teams/red_team.py) of one RedTeamVerdict plus the
          *     experiment_id it was rendered against — the unit foundry/state.py's `invalidations`
@@ -333,6 +422,7 @@ export interface components {
              * @enum {string}
              */
             category: "leakage" | "contamination" | "improper_cv" | "validation_overfitting" | "seed_hacking";
+            evidence: components["schemas"]["AuditEvidence"] | null;
             /** Experiment Id */
             experiment_id: string;
             /** Explanation */

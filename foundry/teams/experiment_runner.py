@@ -42,6 +42,7 @@ from foundry.config import settings
 from foundry.datasets import get_dataset
 from foundry.llm import get_llm
 from foundry.models import (
+    AttemptRecord,
     CleaningPlan,
     CostEntry,
     CVStrategy,
@@ -171,6 +172,7 @@ def experiment_runner(payload: RunnerInput) -> dict[str, object]:
     code_text = ""
     stdout_text = ""
     stderr_text = ""
+    attempt_history: list[AttemptRecord] = []
 
     for attempt in range(settings.self_debug_max_attempts):
         request = request.model_copy(
@@ -187,14 +189,43 @@ def experiment_runner(payload: RunnerInput) -> dict[str, object]:
         if sandbox_result.exit_code != 0:
             tail = sandbox_result.stderr or sandbox_result.stdout
             last_error = tail[-settings.self_debug_error_chars :]
+            attempt_history.append(
+                AttemptRecord(
+                    attempt=attempt,
+                    outcome="failed_execution",
+                    code=code_text,
+                    stdout=stdout_text,
+                    stderr=stderr_text,
+                    error=last_error,
+                )
+            )
             continue
 
         try:
             result_metrics = parse_metrics(sandbox_result.stdout)
         except MetricsParseError as exc:
             last_error = f"exit 0 but no valid metrics were printed: {exc}"
+            attempt_history.append(
+                AttemptRecord(
+                    attempt=attempt,
+                    outcome="failed_metrics",
+                    code=code_text,
+                    stdout=stdout_text,
+                    stderr=stderr_text,
+                    error=last_error,
+                )
+            )
             continue
 
+        attempt_history.append(
+            AttemptRecord(
+                attempt=attempt,
+                outcome="success",
+                code=code_text,
+                stdout=stdout_text,
+                stderr=stderr_text,
+            )
+        )
         break
 
     duration_s = time.monotonic() - start
@@ -239,6 +270,8 @@ def experiment_runner(payload: RunnerInput) -> dict[str, object]:
         code=code_text,
         stdout=stdout_text,
         stderr=stderr_text,
+        spec=spec,
+        attempt_history=attempt_history,
     )
 
     update: dict[str, object] = {"experiments": [experiment_result], "costs": costs}

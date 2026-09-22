@@ -31,7 +31,13 @@ from typing import Any
 from langgraph.types import interrupt
 
 from foundry.config import settings
-from foundry.models import ApprovalRequest, ExperimentSpec, HumanDecision, HumanResponse
+from foundry.models import (
+    ApprovalRequest,
+    ExperimentSpec,
+    HumanDecision,
+    HumanResponse,
+    PendingSpecCost,
+)
 from foundry.state import FoundryState
 from foundry.tools.cost import project_run_usd
 
@@ -72,12 +78,21 @@ def budget_approval_request(
             f"experiment(s) {over_cap_ids} project above the "
             f"${settings.cost_cap_usd_per_run:.2f} per-run cap"
         )
+    pending_specs = [
+        PendingSpecCost(
+            experiment_id=spec.experiment_id,
+            model_family=spec.model_family,
+            projected_cost_usd=projected[spec.experiment_id],
+        )
+        for spec in sorted(pending, key=lambda spec: spec.experiment_id)
+    ]
     return ApprovalRequest(
         gate="budget",
         reason="; ".join(reasons),
         spent_usd=spent_usd,
         budget_usd=budget_usd,
         projected_usd=projected_total,
+        pending_specs=pending_specs,
     )
 
 

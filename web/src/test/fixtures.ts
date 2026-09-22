@@ -1,5 +1,6 @@
 import type {
   ActivityEvent,
+  AuditEvidence,
   ExperimentResult,
   PendingApproval,
   RedTeamFinding,
@@ -57,6 +58,19 @@ export function makeExperiment(id: string, overrides: Partial<ExperimentResult> 
     code: `# ${id}`,
     stdout: "out",
     stderr: "",
+    spec: null,
+    attempt_history: [],
+    ...overrides,
+  };
+}
+
+export function makeEvidence(overrides: Partial<AuditEvidence> = {}): AuditEvidence {
+  return {
+    worst_column: "signup_bonus",
+    worst_column_target_auc: 0.97,
+    duplicate_row_rate: 0.01,
+    reported_metric_name: "roc_auc",
+    reported_metric_value: 0.995,
     ...overrides,
   };
 }
@@ -64,6 +78,7 @@ export function makeExperiment(id: string, overrides: Partial<ExperimentResult> 
 export function makeFinding(
   experimentId: string,
   verdict: RedTeamFinding["verdict"] = "invalidated",
+  overrides: Partial<RedTeamFinding> = {},
 ): RedTeamFinding {
   return {
     experiment_id: experimentId,
@@ -71,6 +86,8 @@ export function makeFinding(
     verdict,
     explanation: "e",
     recommendation: "r",
+    evidence: verdict === "invalidated" ? makeEvidence() : null,
+    ...overrides,
   };
 }
 
@@ -86,6 +103,7 @@ export function makeGate(overrides: Partial<PendingApproval> = {}): PendingAppro
     best_metric_name: null,
     best_metric_value: null,
     n_invalidated: 0,
+    pending_specs: [],
     ...overrides,
   };
 }
