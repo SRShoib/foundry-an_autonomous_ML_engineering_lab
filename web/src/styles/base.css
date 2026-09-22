@@ -85,3 +85,10 @@
   transform-origin: left;
   animation: bar-complete var(--dur-settle) var(--ease-out) both;
 }
+
+/* §3.1's budget meter: "--meter-projected at 35% [opacity], 45° hatch, the projected_usd beyond
+   spend". --meter-projected already carries the 35% alpha (tokens.css), so this utility only adds
+   the diagonal repeat — never a literal colour of its own. */
+@utility meter-hatch {
+  background-image: repeating-linear-gradient(45deg, var(--meter-projected) 0 4px, transparent 4px 8px);
+}
