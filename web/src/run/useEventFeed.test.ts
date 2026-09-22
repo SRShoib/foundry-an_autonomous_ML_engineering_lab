@@ -106,4 +106,34 @@ describe("useEventFeed", () => {
     unmount();
     expect(cancel).toHaveBeenCalled();
   });
+
+  it("reports 0 events/s on the very first flush — there is no prior flush to measure against", () => {
+    const { result } = renderHook(() => useEventFeed(events(5)));
+    tick(16);
+    expect(result.current.ratePerSecond).toBe(0);
+  });
+
+  it("scales a flush's batch size to a per-second rate against the time since the last flush", () => {
+    const { result, rerender } = renderHook(({ list }) => useEventFeed(list), {
+      initialProps: { list: events(1) },
+    });
+    tick(16);
+
+    rerender({ list: events(3) }); // 2 more events
+    tick(120); // comfortably past the 100ms flush gate (the gate itself guarantees elapsed >= 100ms)
+    expect(result.current.batchSize).toBe(2);
+    // 2 events over an elapsed window of at least 100ms is at most 20/s, and the gate's own
+    // scheduling slack (see the "holds new events back" test above) never pushes it far below that.
+    expect(result.current.ratePerSecond).toBeGreaterThan(10);
+    expect(result.current.ratePerSecond).toBeLessThanOrEqual(20);
+  });
+
+  it("resets the rate to 0 on a backwards jump, alongside batchSize", () => {
+    const { result, rerender } = renderHook(({ list }) => useEventFeed(list), {
+      initialProps: { list: events(20) },
+    });
+    tick(16);
+    rerender({ list: events(6) });
+    expect(result.current.ratePerSecond).toBe(0);
+  });
 });
