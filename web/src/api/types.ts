@@ -19,6 +19,7 @@ export type PendingSpecCost = Schemas["PendingSpecCost"];
 export type DataProfile = Schemas["DataProfile"];
 export type LeaderboardEntry = Schemas["LeaderboardEntry"];
 export type TaskResult = Schemas["TaskResult"];
+export type DatasetOption = Schemas["DatasetOption"];
 
 export type Replay = Schemas["Replay"];
 export type ReplayFrame = Schemas["ReplayFrame"];

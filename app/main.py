@@ -32,6 +32,7 @@ from app.events import ActivityEvent
 from app.replay import JsonlRecorder, Replay, ReplaySummary, list_replays, load_replay
 from app.runs import RunManager
 from app.schemas import (
+    DatasetOption,
     PendingApproval,
     ResumeRequest,
     RunStatus,
@@ -39,7 +40,7 @@ from app.schemas import (
     StartRunResponse,
 )
 from foundry.config import settings
-from foundry.datasets import get_dataset
+from foundry.datasets import REGISTRY, get_dataset
 from foundry.eval.harness import TaskResult
 from foundry.graph import build_graph
 from foundry.models import ExperimentResult
@@ -90,6 +91,12 @@ def create_app(
         # there could no longer become a 404. Dependencies resolve before the endpoint is called.
         if not manager().exists(thread_id):
             raise HTTPException(404, f"unknown thread_id {thread_id!r}")
+
+    @app.get("/datasets")
+    def list_datasets() -> list[DatasetOption]:
+        # M9e: the start-a-run panel's dataset select (docs/design-plan.md §6). Sorted by key so the
+        # select's order is stable across restarts rather than dict-insertion-order.
+        return [DatasetOption.from_spec(key, REGISTRY[key]) for key in sorted(REGISTRY)]
 
     @app.post("/runs", status_code=202)
     def start_run(request: StartRunRequest) -> StartRunResponse:
