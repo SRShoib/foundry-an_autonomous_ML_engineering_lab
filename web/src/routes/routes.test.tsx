@@ -142,6 +142,32 @@ describe("replay of the committed demo", () => {
     20_000,
   );
 
+  it(
+    "offers a way to the report only once the run has produced one",
+    async () => {
+      const user = userEvent.setup();
+      renderAt("/replay/demo-churn-leaky");
+      await feed();
+      expect(screen.queryByRole("link", { name: "View report" })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("radio", { name: "16×" }));
+      await screen.findByRole("heading", { name: "budget gate" }, slow);
+      await waitForArmed();
+      await user.click(screen.getByRole("button", { name: "Approve" }));
+      await inFeed("red_team: 3 audited, 3 invalidated");
+      await screen.findByRole("heading", { name: "final gate" }, slow);
+      await waitForArmed();
+      await user.click(screen.getByRole("button", { name: "Approve" }));
+      await inFeed("run complete");
+
+      expect(await screen.findByRole("link", { name: "View report" }, slow)).toHaveAttribute(
+        "href",
+        "/replay/demo-churn-leaky/report",
+      );
+    },
+    20_000,
+  );
+
   it("names the fix when there is no such recording", async () => {
     renderAt("/replay/never-recorded");
     const alert = await screen.findByRole("alert");
@@ -339,6 +365,27 @@ describe("other screens", () => {
     expect(screen.getByRole("link", { name: "Summary" })).toHaveAttribute("href", "#summary");
     expect(screen.getByText("0.8814")).toBeInTheDocument(); // the hero metric
     expect(screen.getByText("ships it")).toBeInTheDocument(); // the model card, below the report
+  });
+
+  it(
+    "renders a recording's own report, folded straight from its JSONL with no API involved",
+    { timeout: 8000 },
+    async () => {
+      renderAt("/replay/demo-churn-leaky/report");
+      // "exp-004 is the strongest candidate..." appears in BOTH report_md's Recommendation section
+      // and model_card_md's own Notes (the recorded reporter repeats itself there) — so this picks
+      // sign-off text unique to the report, to prove report_md rendered without a false match.
+      expect(await screen.findByText(/approved while recording \(final gate\)/, {}, slow)).toBeInTheDocument();
+      // "0.7262" also appears in the leaderboard table and the model card, so scope to the hero.
+      expect(screen.getByText("0.7262", { selector: ".text-display" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Summary" })).toHaveAttribute("href", "#summary");
+    },
+  );
+
+  it("names the fix when the recording named in a report URL does not exist", async () => {
+    renderAt("/replay/never-recorded/report");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent('No recorded run named "never-recorded"');
   });
 
   it("has a not-found screen that leads somewhere", () => {

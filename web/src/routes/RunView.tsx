@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router";
 
 import { AuditPanel } from "../app/AuditPanel";
 import { ActivityFeed } from "../app/ActivityFeed";
@@ -15,6 +16,7 @@ import { RunRail } from "../app/RunRail";
 import { TopBar, type Meta } from "../app/TopBar";
 import { useInvalidationChoreography } from "../app/useInvalidationChoreography";
 import { LiveRegion } from "../components/ui/LiveRegion";
+import { Button } from "../components/ui/Button";
 import { Panel } from "../components/ui/Panel";
 import { ErrorState } from "../components/states/ErrorState";
 import { Skeleton, SkeletonLines } from "../components/states/Skeleton";
@@ -37,8 +39,21 @@ const TABS: readonly Tab<MobileTab>[] = [
  * instruments: the feed's team rails and two-line rows, the rail's phase ladder/team roster/cost
  * breakdown, the budget meter, and the leaderboard. M9d built the last two SPEC screens this view
  * owns: the approval gates (GateDialog) and the red-team finding (AuditPanel, §8's choreography,
- * the leaderboard's flag/demote beats, the connector), plus the experiment drawer. */
-export function RunView({ goal, meta }: { goal?: string; meta: readonly Meta[] }) {
+ * the leaderboard's flag/demote beats, the connector), plus the experiment drawer. M9f added the
+ * last leg of SPEC's own verification path: a "View report" link once `report_md` exists, to
+ * wherever the caller's `reportHref` points (a live run's API-backed report, or a replay's own,
+ * folded straight from its recording — see LiveRunRoute.tsx / ReplayRoute.tsx). */
+export function RunView({
+  goal,
+  meta,
+  reportHref,
+}: {
+  goal?: string;
+  meta: readonly Meta[];
+  /** Set once the run/replay has produced a report — see the "View report" link below. Absent for
+   * routes with nowhere to send it (there is none today, but RunView shouldn't assume one exists). */
+  reportHref?: string;
+}) {
   const { source, state } = useRunSource();
   const feed = useEventFeed(state.events);
   const [tab, setTab] = useState<MobileTab>("activity");
@@ -117,9 +132,16 @@ export function RunView({ goal, meta }: { goal?: string; meta: readonly Meta[] }
         aria-labelledby={tabId("activity")}
         className="flex min-h-full flex-col"
       >
-        <div className="flex items-baseline justify-between border-b border-line-hairline px-4 py-3">
+        <div className="flex items-baseline justify-between gap-3 border-b border-line-hairline px-4 py-3">
           <h1 className="text-md font-medium text-fg">activity</h1>
-          <span className="num text-xs text-fg-muted">{feed.visible.length} events</span>
+          <div className="flex items-baseline gap-3">
+            {reportHref !== undefined && status !== null && status.report_md !== null && (
+              <Button asChild variant="quiet">
+                <Link to={reportHref}>View report</Link>
+              </Button>
+            )}
+            <span className="num text-xs text-fg-muted">{feed.visible.length} events</span>
+          </div>
         </div>
 
         {hasNotices && (

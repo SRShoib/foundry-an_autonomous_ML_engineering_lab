@@ -8,6 +8,7 @@ import { loadReplay } from "../replay/loadReplay";
 import { RunSourceProvider } from "../run/RunSourceContext";
 import { createReplayRunSource } from "../run/replayRunSource";
 import { useManagedRunSource } from "../run/useRunSource";
+import { links } from "./routes";
 import { RunView, RunViewSkeleton } from "./RunView";
 
 function ReplayPlayer({ replay }: { replay: Replay }) {
@@ -23,6 +24,7 @@ function ReplayPlayer({ replay }: { replay: Replay }) {
           { label: "dataset", value: header.task },
           { label: "run", value: shortId(header.thread_id) },
         ]}
+        reportHref={links.replayReport(header.name)}
       />
     </RunSourceProvider>
   );
