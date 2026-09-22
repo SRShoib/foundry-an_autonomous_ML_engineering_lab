@@ -62,9 +62,11 @@ ALLOWED_MSGPACK_MODULES: tuple[tuple[str, str], ...] = (
     ("foundry.models", "CVStrategy"),
     ("foundry.models", "ExperimentSpec"),
     ("foundry.models", "ExperimentResult"),
+    ("foundry.models", "AttemptRecord"),
     ("foundry.models", "LeaderboardEntry"),
     ("foundry.models", "CostEntry"),
     ("foundry.models", "RedTeamFinding"),
+    ("foundry.models", "AuditEvidence"),
     ("foundry.models", "HumanDecision"),
     ("foundry.models", "ApproachMemo"),
 )

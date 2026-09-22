@@ -12,7 +12,10 @@ export type RunStatus = Schemas["RunStatus"];
 export type PendingApproval = Schemas["PendingApproval"];
 export type ActivityEvent = Schemas["ActivityEvent"];
 export type ExperimentResult = Schemas["ExperimentResult"];
+export type AttemptRecord = Schemas["AttemptRecord"];
 export type RedTeamFinding = Schemas["RedTeamFinding"];
+export type AuditEvidence = Schemas["AuditEvidence"];
+export type PendingSpecCost = Schemas["PendingSpecCost"];
 export type DataProfile = Schemas["DataProfile"];
 export type LeaderboardEntry = Schemas["LeaderboardEntry"];
 export type TaskResult = Schemas["TaskResult"];
@@ -30,6 +33,8 @@ export type ResumeRequest = Schemas["ResumeRequest"];
 export type RunStatusKind = RunStatus["status"];
 export type ApprovalGate = PendingApproval["gate"];
 export type EventKind = ActivityEvent["kind"];
+export type RedTeamCategory = RedTeamFinding["category"];
+export type AttemptOutcome = AttemptRecord["outcome"];
 
 /** One line of a replay .jsonl file (app/replay.py's replay_to_jsonl): the header first, then one
  * frame per line, each tagged with `kind`. */

@@ -54,6 +54,12 @@ afterEach(() => {
 const feed = () => screen.findByRole("list", { name: "Activity feed" }, { timeout: 4000 });
 const slow = { timeout: 5000 } as const;
 
+/** GateDialog.tsx's 400ms arm: Approve is disabled until it fills. Polls for real — this suite
+ * uses real timers throughout, not fake ones. */
+async function waitForArmed() {
+  await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled(), slow);
+}
+
 /** Waits for a feed ROW with this text. Queries are scoped to the list on purpose: the sr-only live
  * region announces the same summary, so an unscoped findByText sees two matches — and findBy*
  * quietly retries on "multiple elements" until it times out, which reads as a hang. */
@@ -80,16 +86,22 @@ describe("replay of the committed demo", () => {
 
       await user.click(screen.getByRole("radio", { name: "16×" }));
 
-      // the budget gate: the run has stopped and is waiting for a person
+      // the budget gate: the run has stopped and is waiting for a person. GateDialog.tsx is a
+      // real modal (Radix's `hideOthers`, "we should not hide aria-live elements") — everything
+      // outside it, aria-live regions excepted, is aria-hidden while it is open, by design (§6:
+      // "a gate is answered, not dismissed"), so the transport button needs `hidden: true` to be
+      // queryable at all here.
       await screen.findByRole("heading", { name: "budget gate" }, slow);
       expect(screen.getByRole("status", { name: "" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Play replay" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Play replay", hidden: true })).toBeDisabled();
+      await waitForArmed();
       await user.click(screen.getByRole("button", { name: "Approve" }));
 
       // the moment the whole product is built around: the red team overruling the experiments
       await inFeed("red_team: 3 audited, 3 invalidated");
 
       await screen.findByRole("heading", { name: "final gate" }, slow);
+      await waitForArmed();
       await user.click(screen.getByRole("button", { name: "Approve" }));
 
       // shown in the top bar AND the mobile instrument bar (jsdom applies no CSS to hide either)
@@ -116,6 +128,8 @@ describe("replay of the committed demo", () => {
       await user.click(screen.getByRole("radio", { name: "16×" }));
       await screen.findByRole("heading", { name: "budget gate" }, slow);
 
+      // §6: "Reject requires a note."
+      await user.type(screen.getByLabelText("note"), "not ready");
       await user.click(screen.getByRole("button", { name: "Reject" }));
 
       expect(await screen.findByText(/You rejected the budget gate; the recording approved it/)).toBeInTheDocument();
