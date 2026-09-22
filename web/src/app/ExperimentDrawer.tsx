@@ -89,7 +89,7 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
         <button
           type="button"
           onClick={onClose}
-          className="min-h-11 rounded-control border border-line-control px-2 text-xs text-fg-secondary hover:text-fg frame:min-h-8"
+          className="min-h-11 rounded-control border border-line-control px-2 text-xs text-fg-secondary transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised hover:text-fg frame:min-h-8"
         >
           Close
         </button>
@@ -100,7 +100,7 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
           href={mlflowRunUrl(experiment.mlflow_run_id)}
           target="_blank"
           rel="noreferrer"
-          className="border-b border-line-hairline px-4 py-2 text-xs text-status-info"
+          className="border-b border-line-hairline px-4 py-2 text-xs text-status-info transition-colors duration-(--dur-quick) ease-out hover:text-fg"
         >
           Open in MLflow
         </a>
@@ -114,10 +114,11 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
         className="flex border-b border-line-hairline"
         tabClassName={(selected) =>
           cn(
-            "min-h-11 flex-1 border-b-2 px-3 text-sm frame:min-h-8",
-            selected ? "border-line-focus font-medium text-fg" : "border-transparent text-fg-secondary hover:text-fg",
+            "min-h-11 flex-1 px-3 text-sm transition-colors duration-(--dur-quick) ease-out frame:min-h-8",
+            selected ? "font-medium text-fg" : "text-fg-secondary hover:text-fg",
           )
         }
+        indicator
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">

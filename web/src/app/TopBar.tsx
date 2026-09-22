@@ -15,7 +15,10 @@ import { ThemeToggle } from "./ThemeToggle";
  * for phase/spend/stream-health) and whose own "foundry" link is the way back to runs home. */
 function PrimaryNav() {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    cn("text-sm", isActive ? "text-fg" : "text-fg-secondary hover:text-fg");
+    cn(
+      "text-sm transition-colors duration-(--dur-quick) ease-out",
+      isActive ? "text-fg" : "text-fg-secondary hover:text-fg",
+    );
   return (
     <nav aria-label="Primary" className="flex items-center gap-3">
       <NavLink to="/runs" className={linkClass}>
@@ -57,7 +60,11 @@ export function TopBar({
   children,
 }: TopBarProps) {
   return (
-    <div className="bg-surface-abyss">
+    // §3.3/§7 M9g: a sticky glass bar — translucent + blurred rather than a flat fill, so content
+    // that scrolls underneath it (PageFrame's page-level scroll on runs home/eval/report) reads
+    // through softly instead of vanishing under a hard edge. Harmless where the bar already sits
+    // outside any scrolling ancestor (the live run view's AppFrame grid): `sticky` is then a no-op.
+    <div className="sticky top-0 z-30 bg-surface-glass backdrop-blur-md">
       <div className="flex h-(--layout-topbar) items-center gap-2 border-b border-line-hairline px-4 frame:gap-4">
         <Link to="/runs" className="text-md font-semibold text-fg">
           foundry
