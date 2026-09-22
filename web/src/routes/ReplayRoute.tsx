@@ -15,10 +15,12 @@ function ReplayPlayer({ replay }: { replay: Replay }) {
   const { header } = replay;
   return (
     <RunSourceProvider source={source}>
+      {/* The goal lives in the rail (§5), not the top bar — a live run has nowhere else to show it
+          (RunStatus carries no goal at all), so RunView's own `goal` prop is where it belongs. */}
       <RunView
+        goal={header.goal}
         meta={[
           { label: "dataset", value: header.task },
-          { label: "goal", value: header.goal },
           { label: "run", value: shortId(header.thread_id) },
         ]}
       />
