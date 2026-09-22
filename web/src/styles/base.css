@@ -1,0 +1,87 @@
+/* Element defaults that come from the design plan rather than from any one component. */
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    color: var(--text-primary);
+    background-color: var(--surface-abyss);
+    /* Fonts must never re-flow the frame on load (§5 "no layout shift"). */
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-size: var(--text-base);
+    line-height: var(--text-base--lh);
+    letter-spacing: var(--tracking-normal);
+    color: var(--text-primary);
+    background-color: var(--surface-abyss);
+  }
+
+  /* §10: a 2px ring at a 2px offset, never suppressed. Nothing in src/ may set `outline: none`
+     (styles/design-invariants.test.ts fails the build if it does). */
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--line-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  ::selection {
+    background-color: var(--surface-raised);
+    color: var(--text-primary);
+  }
+
+  /* §7: prefers-reduced-motion swaps every entry to instant. Motion components additionally honour
+     it through <MotionConfig reducedMotion="user">; this is the catch-all for plain CSS. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* §4: every measured value — cost, metric, duration, seq, timestamp, experiment_id — is Plex Mono
+   in tabular figures. Proportional digits make a counting-up number jitter sideways as it changes. */
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-numeric);
+}
+
+/* §7 stream disconnect: a 2px indeterminate line under the top bar while reconnecting, which on
+   reconnect COMPLETES left to right in --dur-settle rather than vanishing. */
+@keyframes bar-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+
+@keyframes bar-complete {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@utility bar-indeterminate {
+  width: 30%;
+  animation: bar-indeterminate var(--dur-deliberate) var(--ease-in-out) infinite;
+}
+
+@utility bar-complete {
+  width: 100%;
+  transform-origin: left;
+  animation: bar-complete var(--dur-settle) var(--ease-out) both;
+}

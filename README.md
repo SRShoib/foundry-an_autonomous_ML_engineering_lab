@@ -6,12 +6,13 @@ trained model, an experiment report, and a model card. See [SPEC.md](SPEC.md) fo
 architecture and milestone plan; see [CLAUDE.md](CLAUDE.md) for project conventions and
 guardrails.
 
-This repo is built one milestone at a time. **Status: M8 (eval) complete.**
+This repo is built one milestone at a time. **Status: M9b (console foundations) complete.**
 
 ## Requirements
 
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
 - Docker + Docker Compose
+- Node 22.22+ and npm, for the operator console in `web/`
 
 ## Getting started
 
@@ -58,6 +59,40 @@ make down                    # stop postgres + mlflow
 ```
 
 MLflow UI: http://localhost:5000
+
+## Operator console (M9)
+
+`web/` is a React + Vite + TypeScript console for watching the agent teams and stepping in at the
+two approval gates. It is built stage by stage (M9b–M9f); [docs/design-plan.md](docs/design-plan.md)
+is its contract. **M9b is the foundation:** the app shell, design tokens, an API client whose types
+are generated from FastAPI's OpenAPI schema, one stream abstraction for live and replayed runs, and
+a recorded demo. The live-run screens themselves land in M9c–M9e.
+
+```sh
+make web-install   # npm ci
+make api           # the API, on the host (needs `make up`)
+make web           # the console, http://localhost:5173 (hot reload; proxies /api to :8000)
+make console       # the BUILT console in Docker, http://localhost:5174
+make web-check     # typecheck + Vitest
+```
+
+**Replay needs no API.** Open <http://localhost:5173/replay/demo-churn-leaky> with nothing running on
+`:8000` and the console plays back a real recorded run: the red team catching a booby-trapped
+leaky dataset, with both approval gates. Use it for UI work and demos; it costs nothing.
+
+- **Why the API stays on the host.** It launches sandbox containers, so it needs the host's Docker
+  daemon, and handing a container the Docker socket is a bigger hole than the console is worth. The
+  `web` compose service (`make console`, behind the `console` profile so `make up` stays fast)
+  reaches the API at `host.docker.internal`.
+- **Types are generated, never hand-written.** `make openapi` dumps the API's schema to
+  `web/openapi.json` and `make types` turns it into `web/src/api/schema.d.ts`; both are committed,
+  and `make test` / `make web-check` fail if either is stale.
+- **Recording.** Every live run is recorded to `artifacts/replays/`. `make record-replay` records
+  the committed demo (`web/public/replays/demo-churn-leaky.jsonl`) against the real Docker sandbox;
+  it needs Docker up and `make sandbox-build`.
+- **TypeScript is pinned to 5.9**, not 7. `openapi-typescript` builds its output through the
+  TypeScript compiler API, which the native TypeScript 7 compiler does not ship, and no release of
+  it supports 7 yet. Move to 7 when it does.
 
 ## Evaluation results
 

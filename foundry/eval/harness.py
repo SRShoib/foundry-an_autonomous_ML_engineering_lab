@@ -26,13 +26,14 @@ from pydantic import BaseModel, Field
 from foundry.config import settings
 from foundry.datasets import get_dataset
 from foundry.graph import build_graph, initial_state, run_config
-from foundry.models import CostEntry
+from foundry.models import WIRE_CONFIG, CostEntry
 from foundry.state import FoundryState
 from foundry.stubs import install_canned_responses
 from foundry.teams.reporter import cost_by_agent
 
 
 class TaskResult(BaseModel):
+    model_config = WIRE_CONFIG
     dataset_ref: str
     config: str
     approach: str
