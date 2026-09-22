@@ -1,0 +1,11 @@
+/* docs/design-plan.md §4. Self-hosted through Fontsource, latin subset only — no third-party font
+ * CDN, so the console renders identically offline and during a replay demo with the API stopped.
+ * Weights stop at 600; there is no 700 anywhere. Newsreader is confined to the report view and
+ * model card (M9e). */
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/newsreader/latin-400.css";
+@import "@fontsource/newsreader/latin-500.css";

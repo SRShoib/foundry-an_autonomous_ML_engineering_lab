@@ -1,0 +1,98 @@
+@import "tailwindcss";
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./base.css";
+
+/* Tailwind gets the tokens through `@theme inline`, which is load-bearing: `inline` makes each
+ * generated utility REFERENCE the variable (`background: var(--surface-panel)`) instead of copying
+ * its value, so `bg-surface-panel` follows `:root[data-theme="light"]` with no second definition.
+ * tokens.css stays the single source of truth, named exactly as docs/design-plan.md names them.
+ *
+ * Tailwind's own palette, type scale, radii, shadows and easings are reset first, so a raw
+ * `bg-red-500`, `rounded-xl` or `shadow-lg` is not merely discouraged — it does not exist. */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --font-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --ease-*: initial;
+  --tracking-*: initial;
+
+  /* §5: the three-column frame needs 216 + 480 + 340 plus gutters; below this it collapses to the
+     44px instrument bar and tabs. `frame:` is the variant. */
+  --breakpoint-frame: 1100px;
+}
+
+@theme inline {
+  --color-surface-abyss: var(--surface-abyss);
+  --color-surface-deck: var(--surface-deck);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-inset: var(--surface-inset);
+
+  --color-line-hairline: var(--line-hairline);
+  --color-line-strong: var(--line-strong);
+  --color-line-control: var(--line-control);
+  --color-line-focus: var(--line-focus);
+
+  /* fg-*, not text-*: `text-text-primary` would read as a stutter */
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+
+  --color-team-principal: var(--team-principal);
+  --color-team-data: var(--team-data);
+  --color-team-modeling: var(--team-modeling);
+  --color-team-runner: var(--team-runner);
+  --color-team-redteam: var(--team-redteam);
+  --color-team-reporter: var(--team-reporter);
+
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-danger: var(--status-danger);
+  --color-status-info: var(--status-info);
+  --color-status-idle: var(--status-idle);
+
+  --color-meter-track: var(--meter-track);
+  --color-meter-safe: var(--meter-safe);
+  --color-meter-pressure: var(--meter-pressure);
+  --color-meter-critical: var(--meter-critical);
+  --color-meter-projected: var(--meter-projected);
+
+  --radius-panel: var(--radius-panel);
+  --radius-control: var(--radius-control);
+  --radius-float: var(--radius-float);
+  --radius-pill: var(--radius-pill);
+  --shadow-float: var(--shadow-float);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+
+  --text-2xs: var(--text-2xs);
+  --text-2xs--line-height: var(--text-2xs--lh);
+  --text-xs: var(--text-xs);
+  --text-xs--line-height: var(--text-xs--lh);
+  --text-sm: var(--text-sm);
+  --text-sm--line-height: var(--text-sm--lh);
+  --text-base: var(--text-base);
+  --text-base--line-height: var(--text-base--lh);
+  --text-md: var(--text-md);
+  --text-md--line-height: var(--text-md--lh);
+  --text-lg: var(--text-lg);
+  --text-lg--line-height: var(--text-lg--lh);
+  --text-xl: var(--text-xl);
+  --text-xl--line-height: var(--text-xl--lh);
+  --text-2xl: var(--text-2xl);
+  --text-2xl--line-height: var(--text-2xl--lh);
+  --text-display: var(--text-display);
+  --text-display--line-height: var(--text-display--lh);
+
+  --tracking-normal: var(--tracking-normal);
+  --tracking-numeric: var(--tracking-numeric);
+
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+  --ease-instrument: var(--ease-instrument);
+}

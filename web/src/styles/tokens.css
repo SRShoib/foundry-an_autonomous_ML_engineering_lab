@@ -1,0 +1,165 @@
+/* foundry operator console — design tokens (docs/design-plan.md §3, §4, §7).
+ *
+ * The ONLY file in web/ that may contain a raw colour (styles/no-raw-hex.test.ts enforces it), and
+ * plain CSS custom properties rather than Tailwind `@theme`, deliberately: §3 names tokens exactly
+ * (--surface-abyss, --team-redteam), the light theme has different VALUES rather than being an
+ * inversion, and styles/tokens.contrast.test.ts must parse the real variables — which under
+ * `@theme` only exist after a Tailwind build. theme.css bridges these to Tailwind utilities.
+ *
+ * Two complete themes: dark ("instrument slate") on :root, light ("datasheet") on
+ * :root[data-theme="light"]. Every colour token is defined in BOTH; the contrast test fails if the
+ * light block ever inherits a dark value by omission.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* §3.1 surfaces — elevation is a hue shift plus a 1px border, never a shadow */
+  --surface-abyss: #0d1117;
+  --surface-deck: #141a22;
+  --surface-panel: #1a212b;
+  --surface-raised: #222b36;
+  --surface-inset: #0f151c;
+
+  /* lines: hairline/strong are decorative; control is the 3:1 boundary for inputs and buttons */
+  --line-hairline: #232c38;
+  --line-strong: #33404f;
+  --line-control: #62798f;
+  --line-focus: #6494f0;
+
+  --text-primary: #e6edf5;
+  --text-secondary: #9fb0c3;
+  --text-muted: #8396ab;
+
+  /* team hues: functional encoding of "who acted" — a 3px rail and a glyph, never a fill */
+  --team-principal: #c9b27a;
+  --team-data: #5fa8c7;
+  --team-modeling: #8c9ee0;
+  --team-runner: #6fb39a;
+  --team-redteam: #e5726d;
+  --team-reporter: #b08cc7;
+
+  /* status ramp: "what state", deliberately separate from "who". danger === team-redteam because
+     an invalidation IS the danger state. idle is graphic-only, always beside a text label. */
+  --status-ok: #4fb286;
+  --status-warn: #d9a44c;
+  --status-danger: #e5726d;
+  --status-info: #6494f0;
+  --status-idle: #66798d;
+
+  /* budget meter: a continuous quantity gets its own ramp (safe <70%, pressure 70-90%, critical >90%) */
+  --meter-track: #232c38;
+  --meter-safe: #4fb286;
+  --meter-pressure: #d9a44c;
+  --meter-critical: #e5726d;
+  --meter-projected: rgb(217 164 76 / 0.35);
+
+  /* §3.3 shape: radius encodes permanence. No box-shadow exists in the docked layer. */
+  --radius-panel: 3px;
+  --radius-control: 4px;
+  --radius-float: 10px;
+  --radius-pill: 999px;
+  --shadow-float: 0 16px 40px -12px rgba(6, 10, 16, 0.72);
+
+  /* 4px grid: 4 8 12 16 24 32 48 64 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* §4 typefaces. Numbers are always Plex Mono, always tabular (see base.css). */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
+  --font-serif: "Newsreader", ui-serif, Georgia, serif;
+
+  /* §4 scale, root 16px. --text-display is reserved: red-team category and the final report metric. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--lh: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--lh: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--lh: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--lh: 1.375rem;
+  --text-md: 1rem;
+  --text-md--lh: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--lh: 1.75rem;
+  --text-xl: 1.625rem;
+  --text-xl--lh: 2rem;
+  --text-2xl: 2.125rem;
+  --text-2xl--lh: 2.5rem;
+  --text-display: 2.75rem;
+  --text-display--lh: 3rem;
+
+  /* No tracking token above 0.01em: tracked-out caps cannot be reintroduced casually (§4). */
+  --tracking-normal: 0em;
+  --tracking-numeric: 0.01em;
+
+  /* §7 motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-instrument: cubic-bezier(0.34, 0.8, 0.28, 1);
+  --dur-instant: 90ms;
+  --dur-quick: 160ms;
+  --dur-base: 240ms;
+  --dur-settle: 300ms; /* §7 names 300ms three times (reconnect bar, meter colour, deck re-energize) */
+  --dur-slow: 420ms;
+  --dur-deliberate: 700ms;
+  --dur-moment: 1400ms;
+
+  /* §10 focus: a 2px ring at a 2px offset, never suppressed */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* §5 frame geometry */
+  --layout-topbar: 56px;
+  --layout-rail: 216px;
+  --layout-dock: 340px;
+  --layout-center-min: 480px;
+  --layout-instrument-bar: 44px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* §3.2 "datasheet": cool neutral paper — not an inversion of dark, and explicitly not cream */
+  --surface-abyss: #eef1f5;
+  --surface-deck: #f7f9fb;
+  --surface-panel: #ffffff;
+  --surface-raised: #ffffff; /* bordered with --line-strong; paper has no hue shift to lift with */
+  --surface-inset: #edf1f5;
+
+  --line-hairline: #dce3eb;
+  --line-strong: #c2cdd9;
+  --line-control: #718aa6;
+  --line-focus: #2a5fc7;
+
+  --text-primary: #131a22;
+  --text-secondary: #45566a;
+  --text-muted: #5a6d83;
+
+  --team-principal: #82662a;
+  --team-data: #1f6f91;
+  --team-modeling: #4a5cb0;
+  --team-runner: #2a775e;
+  --team-redteam: #c0342e;
+  --team-reporter: #7a4f94;
+
+  --status-ok: #1f7a55;
+  --status-warn: #8e620e;
+  --status-danger: #c0342e;
+  --status-info: #2a5fc7;
+  --status-idle: #6b7d91;
+
+  /* §3.2 leaves the meter ramp implicit: it reuses the status hues, exactly as dark does */
+  --meter-track: #dce3eb;
+  --meter-safe: #1f7a55;
+  --meter-pressure: #8e620e;
+  --meter-critical: #c0342e;
+  --meter-projected: rgb(142 98 14 / 0.35);
+}

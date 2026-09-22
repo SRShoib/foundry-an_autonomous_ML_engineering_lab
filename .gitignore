@@ -20,3 +20,12 @@ artifacts/
 model.pkl
 CLAUDE.md
 .claude/
+
+# web/ (operator console). dist/ above already covers web/dist/. web/openapi.json,
+# web/src/api/schema.d.ts and web/public/replays/*.jsonl are committed on purpose.
+node_modules/
+web/.vite/
+web/coverage/
+web/test-results/
+web/playwright-report/
+web/blob-report/

@@ -101,6 +101,24 @@ def test_experiment_result_no_longer_accepts_invalidated_as_a_status() -> None:
         )
 
 
+def test_experiment_result_output_fields_default_so_old_checkpoints_still_deserialize() -> None:
+    """M9b added code/stdout/stderr. ExperimentResult is msgpack-allowlisted in
+    foundry/graph.py, so a Postgres checkpoint written before these fields existed carries a
+    payload without them and must still validate."""
+    old_payload = {
+        "experiment_id": "exp-1",
+        "mlflow_run_id": "abc",
+        "status": "success",
+        "metrics": {"roc_auc": 0.9},
+        "cost_usd": 0.05,
+        "duration_s": 1.5,
+        "attempts": 2,
+        "error": None,
+    }
+    result = ExperimentResult.model_validate(old_payload)
+    assert (result.code, result.stdout, result.stderr) == ("", "", "")
+
+
 def test_red_team_verdict_rejects_unknown_category() -> None:
     with pytest.raises(ValidationError):
         RedTeamVerdict(

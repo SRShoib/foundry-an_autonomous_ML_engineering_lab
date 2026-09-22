@@ -93,6 +93,13 @@ class CodeRequest(BaseModel):
     previous_error: str | None = None
 
 
+def _tail(text: str) -> str:
+    """Keep the END of sandbox output: a traceback's last frame and the FOUNDRY_METRICS line are
+    both printed last, so head-truncation would discard exactly what matters."""
+    limit = settings.experiment_output_chars
+    return text[-limit:] if limit > 0 else ""
+
+
 def _family_description(model_family: str, task_type: str) -> str:
     """model_family names a model FAMILY, not a concrete sklearn class — foundry/stubs.py's
     per-(family, task_type) estimator table is the code-owned source of truth for which class
@@ -161,6 +168,9 @@ def experiment_runner(payload: RunnerInput) -> dict[str, object]:
     attempts_used = 0
     result_metrics: dict[str, float] | None = None
     artifacts: dict[str, bytes] = {}
+    code_text = ""
+    stdout_text = ""
+    stderr_text = ""
 
     for attempt in range(settings.self_debug_max_attempts):
         request = request.model_copy(
@@ -170,6 +180,9 @@ def experiment_runner(payload: RunnerInput) -> dict[str, object]:
         sandbox_result = sandbox.run(code.code, data_dir=dataset.path.parent, limits=limits)
         attempts_used = attempt + 1
         artifacts = sandbox_result.artifacts
+        code_text = code.code
+        stdout_text = _tail(sandbox_result.stdout)
+        stderr_text = _tail(sandbox_result.stderr)
 
         if sandbox_result.exit_code != 0:
             tail = sandbox_result.stderr or sandbox_result.stdout
@@ -212,27 +225,21 @@ def experiment_runner(payload: RunnerInput) -> dict[str, object]:
     if run_id is None:
         errors.append(f"experiment_runner: mlflow logging failed for {spec.experiment_id}")
 
-    if result_metrics is not None:
-        experiment_result = ExperimentResult(
-            experiment_id=spec.experiment_id,
-            mlflow_run_id=run_id,
-            status="success",
-            metrics=result_metrics,
-            cost_usd=cost_usd,
-            duration_s=duration_s,
-            attempts=attempts_used,
-        )
-    else:
-        experiment_result = ExperimentResult(
-            experiment_id=spec.experiment_id,
-            mlflow_run_id=run_id,
-            status="failed",
-            metrics={},
-            cost_usd=cost_usd,
-            duration_s=duration_s,
-            attempts=attempts_used,
-            error=last_error,
-        )
+    # One construction path for both outcomes (status is already derived from result_metrics
+    # above), so the success and failed results cannot drift apart on the captured-output fields.
+    experiment_result = ExperimentResult(
+        experiment_id=spec.experiment_id,
+        mlflow_run_id=run_id,
+        status=status,
+        metrics=result_metrics or {},
+        cost_usd=cost_usd,
+        duration_s=duration_s,
+        attempts=attempts_used,
+        error=None if result_metrics is not None else last_error,
+        code=code_text,
+        stdout=stdout_text,
+        stderr=stderr_text,
+    )
 
     update: dict[str, object] = {"experiments": [experiment_result], "costs": costs}
     if errors:

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>foundry operator console</title>
+    <!-- Sets data-theme before first paint so a stored light preference never flashes dark. Dark is
+         the default (docs/design-plan.md §3); prefers-color-scheme is honoured only when nothing is
+         stored. Mirrored by src/app/theme.ts — keep the storage key in sync. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("foundry.theme");
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

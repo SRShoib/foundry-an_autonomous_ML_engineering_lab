@@ -39,6 +39,28 @@ services:
       timeout: 5s
       retries: 10
 
+  # The operator console, built and served on :5174 (`make console`). Not started by `make up`:
+  # the `console` profile keeps `up --build --wait` from running `npm ci` and a Vite build on every
+  # backend cycle. For development use `make web` instead (Vite on :5173, hot reload). The API is
+  # NOT a service here — it must reach the host Docker daemon for the sandbox — so the console
+  # reaches it on the host at host.docker.internal (docker/web/Caddyfile).
+  web:
+    profiles: ["console"]
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      FOUNDRY_API_UPSTREAM: ${FOUNDRY_API_UPSTREAM:-host.docker.internal:8000}
+    ports:
+      - "${WEB_PORT:-5174}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:
   mlflow_artifacts:
