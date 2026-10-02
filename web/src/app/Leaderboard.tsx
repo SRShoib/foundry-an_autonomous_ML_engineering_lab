@@ -1,11 +1,14 @@
+import { Ban, Trophy } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import type { LeaderboardEntry, RunStatus } from "../api/types";
 import { EmptyState } from "../components/states/EmptyState";
 import { Panel } from "../components/ui/Panel";
+import { cn } from "../lib/cn";
 import { formatMetric } from "../lib/format";
 import { useAnimatedNumber } from "../lib/useAnimatedNumber";
+import { WASH } from "../lib/wash";
 import type { Choreography } from "./useInvalidationChoreography";
 
 const GAIN_TINT_S = 0.6; // §7: "a row that gained rank gets a 600ms decaying tint on its left edge"
@@ -53,7 +56,8 @@ function useRankGains(entries: readonly LeaderboardEntry[]): ReadonlySet<string>
 
 /** Every table row is the full width of the panel and carries the action verb only in its
  * accessible name (§'s avoid-list: state the action, never decorate with "→") — the visible row
- * stays exactly the dense id/metric line it always was. */
+ * stays exactly the dense id/metric line it always was. `relative overflow-hidden` so the row's data
+ * bar (below) sits inside the button and is clipped to its rounded corners. */
 function RowButton({
   experimentId,
   children,
@@ -68,30 +72,53 @@ function RowButton({
       type="button"
       onClick={() => onOpen(experimentId)}
       aria-label={`Open experiment ${experimentId}`}
-      className="-mx-2 flex w-full items-baseline gap-3 rounded-control px-2 text-left transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised"
+      className="relative -mx-2 flex w-full items-center gap-3 overflow-hidden rounded-control px-2 py-1 text-left transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised"
     >
       {children}
     </button>
   );
 }
 
+/** The rank, as a chip. #1 takes the brand's deep gradient — the one place the leaderboard says
+ * "winner" — and everything below it a neutral raised chip. Ranks are a real ordering
+ * (`LeaderboardEntry.rank`), so the numbers stay (the SPEC avoid-list's numbered-marker rule is about
+ * content that is NOT a sequence). No team hue anywhere here (§3.1: "never in a table"). */
+function RankChip({ rank }: { rank: number }) {
+  return (
+    <span
+      className={cn(
+        "num relative grid size-6 shrink-0 place-items-center rounded-chip text-xs font-semibold",
+        rank === 1 ? "brand-fill-deep text-accent-contrast shadow-highlight" : "bg-surface-raised text-fg-secondary",
+      )}
+    >
+      {rank}
+    </span>
+  );
+}
+
 function LeaderboardRow({
   entry,
+  best,
   justGained,
   onOpen,
 }: {
   entry: LeaderboardEntry;
+  /** The top-ranked metric value, which the row's data bar is drawn relative to. */
+  best: number;
   justGained: boolean;
   onOpen: (experimentId: string) => void;
 }) {
   const value = useAnimatedNumber(entry.primary_metric_value);
+  // A bar proportional to the metric as a share of the best one: an honest, scale-free reading that
+  // makes sense for any metric the run optimises. Decoration only — the number beside it is the value.
+  const share = best > 0 ? Math.min(1, Math.max(0, entry.primary_metric_value / best)) : 0;
   return (
     // §7: "380ms layout animation, --ease-in-out. Only moved rows animate" — `layout` is exactly
     // that: framer-motion animates a row's position only when it actually moves between renders.
     <motion.li
       layout
       transition={{ duration: 0.38, ease: [0.65, 0, 0.35, 1] }}
-      className="relative border-b border-line-hairline py-2 last:border-b-0"
+      className="relative border-b border-line-hairline py-1.5 last:border-b-0"
     >
       {justGained && (
         <motion.span
@@ -103,10 +130,14 @@ function LeaderboardRow({
         />
       )}
       <RowButton experimentId={entry.experiment_id} onOpen={onOpen}>
-        <span className="num w-5 text-sm text-fg-muted">{entry.rank}</span>
-        {/* No team hue anywhere here — §3.1: "never in a table". */}
-        <span className="num flex-1 truncate text-sm text-fg">{entry.experiment_id}</span>
-        <span className="num text-sm text-fg">{formatMetric(value)}</span>
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 bg-accent-soft"
+          style={{ width: `${share * 100}%` }}
+        />
+        <RankChip rank={entry.rank} />
+        <span className="num relative flex-1 truncate text-sm text-fg">{entry.experiment_id}</span>
+        <span className="num relative text-sm font-medium text-fg">{formatMetric(value)}</span>
       </RowButton>
     </motion.li>
   );
@@ -126,10 +157,12 @@ function FlaggedRow({ entry }: { entry: LeaderboardEntry }) {
       initial={false}
       exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0 }}
       transition={{ duration: 0.32, ease: [0.65, 0, 0.35, 1] }}
-      className="flex items-baseline gap-3 border-b border-line-hairline py-2 last:border-b-0"
+      className={cn("flex items-center gap-3 border-b border-line-hairline py-2 last:border-b-0", WASH.danger)}
     >
-      <span aria-hidden="true" className="num w-5 text-sm text-status-danger">
-        ⊘
+      {/* M9h: lucide's `Ban` is the same ⊘ mark the design plan names, as an icon; the sr-only word
+          beside it is what carries "invalidated" to assistive tech. */}
+      <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-chip bg-status-danger/15 text-status-danger">
+        <Ban className="size-3.5" strokeWidth={2.5} />
       </span>
       <span className="sr-only">invalidated</span>
       <span className="num flex-1 truncate text-sm text-fg-muted line-through decoration-status-danger">
@@ -192,8 +225,15 @@ export function Leaderboard({ status, choreography, onOpen }: LeaderboardProps) 
   const before = flaggedEntry === undefined ? sorted : sorted.slice(0, insertAt === -1 ? sorted.length : insertAt);
   const after = flaggedEntry === undefined ? [] : sorted.slice(insertAt === -1 ? sorted.length : insertAt);
 
+  const best = sorted[0]?.primary_metric_value ?? 0;
+
   return (
-    <Panel id={LEADERBOARD_PANEL_ID} title="leaderboard" meta={metricName === undefined ? undefined : metricName}>
+    <Panel
+      id={LEADERBOARD_PANEL_ID}
+      title="leaderboard"
+      icon={Trophy}
+      meta={metricName === undefined ? undefined : metricName}
+    >
       {sorted.length === 0 && flaggedEntry === undefined ? (
         <EmptyState
           title="No ranked experiments yet"
@@ -203,11 +243,23 @@ export function Leaderboard({ status, choreography, onOpen }: LeaderboardProps) 
         <ol aria-label="Leaderboard" className="flex flex-col">
           <AnimatePresence>
             {before.map((entry) => (
-              <LeaderboardRow key={entry.experiment_id} entry={entry} justGained={gained.has(entry.experiment_id)} onOpen={onOpen} />
+              <LeaderboardRow
+                key={entry.experiment_id}
+                entry={entry}
+                best={best}
+                justGained={gained.has(entry.experiment_id)}
+                onOpen={onOpen}
+              />
             ))}
             {flaggedEntry !== undefined && <FlaggedRow key={flaggedEntry.experiment_id} entry={flaggedEntry} />}
             {after.map((entry) => (
-              <LeaderboardRow key={entry.experiment_id} entry={entry} justGained={gained.has(entry.experiment_id)} onOpen={onOpen} />
+              <LeaderboardRow
+                key={entry.experiment_id}
+                entry={entry}
+                best={best}
+                justGained={gained.has(entry.experiment_id)}
+                onOpen={onOpen}
+              />
             ))}
           </AnimatePresence>
         </ol>

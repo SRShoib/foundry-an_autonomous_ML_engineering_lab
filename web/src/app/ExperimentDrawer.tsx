@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { CircleCheck, ExternalLink, TriangleAlert, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import type { AttemptRecord, ExperimentResult } from "../api/types";
+import { CodeBlock } from "../components/ui/CodeBlock";
 import { Dialog, DialogTitle } from "../components/ui/Dialog";
 import { Tabs, panelId, tabId, type Tab } from "../components/ui/Tabs";
 import { cn } from "../lib/cn";
@@ -22,16 +24,18 @@ const OUTCOME_LABEL: Record<AttemptRecord["outcome"], string> = {
   failed_metrics: "failed — no valid metrics",
 };
 
-function CodeBlock({ children }: { children: string }) {
-  return (
-    <pre className="num overflow-x-auto whitespace-pre-wrap break-words rounded-panel border border-line-hairline bg-surface-inset p-3 text-xs text-fg">
-      {children || "(empty)"}
-    </pre>
-  );
-}
-
 function Missing({ children }: { children: string }) {
   return <p className="text-sm text-fg-secondary">{children}</p>;
+}
+
+/** A small label above a value in the spec tab. */
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-fg-muted">{label}</p>
+      {children}
+    </div>
+  );
 }
 
 interface ExperimentDrawerProps {
@@ -45,7 +49,10 @@ interface ExperimentDrawerProps {
 /** design-plan.md §6's experiment detail drawer: a 560px right sheet with four tabs. Unlike
  * GateDialog, this IS dismissible — Escape and an outside click close it (§7). Give this
  * component a fresh `key={experiment.experiment_id}` at the call site so its own tab selection
- * resets when a different experiment opens, rather than tracking that here. */
+ * resets when a different experiment opens, rather than tracking that here.
+ *
+ * M9h: the sheet is glass (Dialog.tsx), the header's figures are chips, the tabs slide a glowing
+ * gradient indicator, and code/stdout/stderr are `CodeBlock`s with a copy button. */
 export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: ExperimentDrawerProps) {
   const [tab, setTab] = useState<DrawerTab>("spec");
   const primaryMetricValue =
@@ -54,6 +61,7 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
   // committed replay recorded before M9d added them is a static JSONL that predates the promise.
   const spec = experiment.spec ?? null;
   const attemptHistory = experiment.attempt_history ?? [];
+  const figure = "num rounded-chip bg-surface-raised px-2 py-0.5";
 
   return (
     <Dialog
@@ -73,24 +81,25 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
       <div className="flex items-start justify-between gap-3 border-b border-line-hairline p-4">
         <div>
           <DialogTitle asChild>
-            <h2 className="num text-md font-medium text-fg">{experiment.experiment_id}</h2>
+            <h2 className="num text-md font-semibold tracking-tight text-fg">{experiment.experiment_id}</h2>
           </DialogTitle>
-          <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-secondary">
+          <p className="mt-2 flex flex-wrap gap-x-2 gap-y-1.5 text-xs text-fg-secondary">
             {primaryMetricValue !== undefined && (
-              <span className="num">
+              <span className={figure}>
                 {primaryMetricName} {primaryMetricValue.toFixed(4)}
               </span>
             )}
-            <span className="num">{experiment.duration_s.toFixed(1)}s</span>
-            <span className="num">{formatUsdPrecise(experiment.cost_usd)}</span>
-            <span className="num">{experiment.attempts} attempt{experiment.attempts === 1 ? "" : "s"}</span>
+            <span className={figure}>{experiment.duration_s.toFixed(1)}s</span>
+            <span className={figure}>{formatUsdPrecise(experiment.cost_usd)}</span>
+            <span className={figure}>{experiment.attempts} attempt{experiment.attempts === 1 ? "" : "s"}</span>
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="min-h-11 rounded-control border border-line-control px-2 text-xs text-fg-secondary transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised hover:text-fg frame:min-h-8"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-line-control px-2.5 text-xs text-fg-secondary transition-colors duration-(--dur-quick) ease-out hover:border-accent-hover hover:bg-surface-raised hover:text-fg frame:min-h-8"
         >
+          <X aria-hidden="true" className="size-3.5" strokeWidth={2.25} />
           Close
         </button>
       </div>
@@ -100,9 +109,10 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
           href={mlflowRunUrl(experiment.mlflow_run_id)}
           target="_blank"
           rel="noreferrer"
-          className="border-b border-line-hairline px-4 py-2 text-xs text-status-info transition-colors duration-(--dur-quick) ease-out hover:text-fg"
+          className="flex items-center gap-1.5 border-b border-line-hairline px-4 py-2 text-xs text-status-info transition-colors duration-(--dur-quick) ease-out hover:text-fg"
         >
           Open in MLflow
+          <ExternalLink aria-hidden="true" className="size-3" strokeWidth={2.25} />
         </a>
       )}
 
@@ -115,7 +125,7 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
         tabClassName={(selected) =>
           cn(
             "min-h-11 flex-1 px-3 text-sm transition-colors duration-(--dur-quick) ease-out frame:min-h-8",
-            selected ? "font-medium text-fg" : "text-fg-secondary hover:text-fg",
+            selected ? "font-semibold text-fg" : "text-fg-secondary hover:text-fg",
           )
         }
         indicator
@@ -128,25 +138,25 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
               <Missing>No spec recorded for this experiment (a checkpoint from before M9d).</Missing>
             ) : (
               <>
-                <div>
-                  <p className="text-xs text-fg-muted">model family</p>
+                <Field label="model family">
                   <p className="text-sm text-fg">{spec.model_family}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-fg-muted">hyperparameters</p>
-                  <ul className="flex flex-col gap-0.5">
+                </Field>
+                <Field label="hyperparameters">
+                  <ul className="mt-1 flex flex-col rounded-panel border border-line-hairline bg-surface-inset px-3 py-1">
                     {Object.entries(spec.hyperparams).map(([key, value]) => (
-                      <li key={key} className="flex justify-between gap-3 text-sm">
+                      <li
+                        key={key}
+                        className="flex justify-between gap-3 border-b border-line-hairline py-1.5 text-sm last:border-b-0"
+                      >
                         <span className="text-fg-secondary">{key}</span>
                         <span className="num text-fg">{String(value)}</span>
                       </li>
                     ))}
                   </ul>
-                </div>
-                <div>
-                  <p className="text-xs text-fg-muted">rationale</p>
+                </Field>
+                <Field label="rationale">
                   <p className="text-sm text-fg-secondary">{spec.rationale}</p>
-                </div>
+                </Field>
                 <div className="flex justify-between text-sm">
                   <span className="text-fg-muted">estimated vs actual cost</span>
                   <span className="num text-fg">
@@ -160,20 +170,14 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
 
         {tab === "code" && (
           <div role="tabpanel" id={panelId("code")} aria-labelledby={tabId("code")}>
-            <CodeBlock>{experiment.code}</CodeBlock>
+            <CodeBlock label="python">{experiment.code}</CodeBlock>
           </div>
         )}
 
         {tab === "output" && (
           <div role="tabpanel" id={panelId("output")} aria-labelledby={tabId("output")} className="flex flex-col gap-4">
-            <div>
-              <p className="mb-1 text-xs text-fg-muted">stdout</p>
-              <CodeBlock>{experiment.stdout}</CodeBlock>
-            </div>
-            <div>
-              <p className="mb-1 text-xs text-fg-muted">stderr</p>
-              <CodeBlock>{experiment.stderr}</CodeBlock>
-            </div>
+            <CodeBlock label="stdout">{experiment.stdout}</CodeBlock>
+            <CodeBlock label="stderr">{experiment.stderr}</CodeBlock>
           </div>
         )}
 
@@ -184,11 +188,18 @@ export function ExperimentDrawer({ experiment, primaryMetricName, onClose }: Exp
             ) : (
               attemptHistory.map((attempt) => (
                 <div key={attempt.attempt} className="flex flex-col gap-2 border-b border-line-hairline pb-4 last:border-b-0">
-                  <p className="text-sm text-fg">
-                    <span className="num">attempt {attempt.attempt + 1}</span> — {OUTCOME_LABEL[attempt.outcome]}
+                  <p className="flex items-center gap-2 text-sm text-fg">
+                    {attempt.outcome === "success" ? (
+                      <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-status-ok" strokeWidth={2.25} />
+                    ) : (
+                      <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-status-danger" strokeWidth={2.25} />
+                    )}
+                    <span>
+                      <span className="num">attempt {attempt.attempt + 1}</span> — {OUTCOME_LABEL[attempt.outcome]}
+                    </span>
                   </p>
                   {attempt.error !== null && <p className="text-xs text-status-danger">{attempt.error}</p>}
-                  <CodeBlock>{attempt.code}</CodeBlock>
+                  <CodeBlock label="python">{attempt.code}</CodeBlock>
                 </div>
               ))
             )}

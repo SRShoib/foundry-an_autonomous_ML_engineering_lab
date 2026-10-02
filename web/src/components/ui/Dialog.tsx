@@ -34,16 +34,18 @@ interface DialogProps {
   children: ReactNode;
 }
 
-// §3.3 M9g: the float layer's own material — --surface-glass/-glass-border (translucency, alpha
-// >=0.84) plus a native Tailwind backdrop-blur (never reset by theme.css's @theme block, which
-// only zeroes --color-*/--text-*/--font-*/--radius-*/--shadow-*/--ease-*/--tracking-*) in place of
-// the flat --surface-raised fill these two variants used before. --shadow-float itself is now the
-// layered contact-plus-cast shadow token (tokens.css).
+// §3.3 / §12.5 (revised M9h): the float layer's own material — --surface-glass (translucency, alpha
+// >=0.84, so text inside still reads at the contrast verified for --surface-raised) plus a native
+// Tailwind backdrop-blur and saturate (never reset by theme.css's @theme block, which only zeroes
+// --color-*/--text-*/--font-*/--radius-*/--shadow-*/--ease-*/--tracking-*/--animate-*), a 20px
+// --radius-float, and the gradient hairline in place of the flat glass border. --shadow-float is the
+// layered contact-plus-cast shadow with a brand ring (tokens.css). The sheet rounds only the edge
+// that faces the page.
 const VARIANT_CLASS: Record<DialogProps["variant"], string> = {
   centered:
-    "fixed left-1/2 top-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 rounded-float border border-surface-glass-border bg-surface-glass shadow-float backdrop-blur-md",
+    "gradient-border fixed left-1/2 top-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 rounded-float bg-surface-glass shadow-float backdrop-blur-xl backdrop-saturate-150",
   sheet:
-    "fixed inset-y-0 right-0 z-50 flex w-[min(100vw,560px)] flex-col border-l border-surface-glass-border bg-surface-glass shadow-float backdrop-blur-md",
+    "gradient-border fixed inset-y-0 right-0 z-50 flex w-[min(100vw,560px)] flex-col rounded-l-float bg-surface-glass shadow-float backdrop-blur-xl backdrop-saturate-150",
 };
 
 const DEFAULT_PANEL_TRANSITION: NonNullable<DialogProps["panelTransition"]> = {
@@ -82,6 +84,19 @@ export function Dialog({
                 transition={overlayTransition ?? { duration: 0.2 }}
               />
             </RadixDialog.Overlay>
+            {/* M9h: a bloom BEHIND the gate's glass — a sibling of the content, not a child, so the
+                glow never tints the panel's interior (where text sits). Decorative and inert. */}
+            {variant === "centered" && (
+              <motion.div
+                aria-hidden="true"
+                data-bloom=""
+                className="pointer-events-none fixed left-1/2 top-1/2 z-40 aspect-square w-[min(150vw,1000px)] -translate-x-1/2 -translate-y-1/2 bg-(image:--bloom-brand)"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              />
+            )}
             <RadixDialog.Content
               asChild
               forceMount

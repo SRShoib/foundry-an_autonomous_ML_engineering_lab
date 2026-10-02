@@ -24,3 +24,21 @@ export const METER_FILL: Record<MeterTone, string> = {
   pressure: "bg-meter-pressure",
   critical: "bg-meter-critical",
 };
+
+/** M9h: the same tone as a gradient from its status colour to a hotter end colour
+ * (docs/design-plan.md §3.1). It is a `background-image`, so it paints OVER the solid `METER_FILL`
+ * colour rather than replacing it — callers apply both, and the solid class stays as the fallback
+ * and as what the tests and the thin mobile line key off. Spelled out for Tailwind's scanner. */
+export const METER_GRADIENT: Record<MeterTone, string> = {
+  safe: "bg-(image:--gradient-meter-safe)",
+  pressure: "bg-(image:--gradient-meter-pressure)",
+  critical: "bg-(image:--gradient-meter-critical)",
+};
+
+/** The soft glow a tone earns on the docked meter. Calm is un-glowed: glow is reserved for a state
+ * worth noticing (§3.3), and "spend is fine" is not one. */
+export const METER_GLOW: Record<MeterTone, string> = {
+  safe: "",
+  pressure: "shadow-glow-warn",
+  critical: "shadow-glow-danger",
+};

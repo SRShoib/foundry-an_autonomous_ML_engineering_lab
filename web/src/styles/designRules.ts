@@ -72,6 +72,16 @@ export const RULES: readonly Rule[] = [
       ...matches(source, /font-weight\s*:\s*(?:700|800|900|bold|bolder)\b/g, (m) => m),
     ],
   },
+  {
+    id: "no-hover-motion",
+    why: "SPEC (amended M9h) and §7: hover is glow, spotlight or border — never a bounce, lift or scale. Press feedback is `active:`, not `hover:`",
+    check: (source) =>
+      matches(
+        source,
+        /\b(?:group-|peer-)?hover:-?(?:translate|scale)-[\w[\].%/-]+|\banimate-bounce\b/g,
+        (m) => `hover motion ${m}`,
+      ),
+  },
 ];
 
 /** A comment that says "never use outline: none" is documentation, not a violation. `//` is only a

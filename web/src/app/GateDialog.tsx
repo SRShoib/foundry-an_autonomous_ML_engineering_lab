@@ -1,3 +1,4 @@
+import { ShieldCheck, Wallet } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -6,7 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Dialog, DialogTitle } from "../components/ui/Dialog";
 import { cn } from "../lib/cn";
 import { formatUsd, formatUsdPrecise, formatMetric } from "../lib/format";
-import { METER_FILL, meterTone, spendFraction } from "../lib/meter";
+import { METER_FILL, METER_GRADIENT, meterTone, spendFraction } from "../lib/meter";
 
 /** Motion's shared-element id for §7's gate-confirm "fly": only ever claimed by ONE mounted
  * element at a time — this dialog's hero figure while a budget gate is open, BudgetMeter's own
@@ -23,8 +24,11 @@ function MiniMeter({ label, fraction, tone }: { label: string; fraction: number;
       <div className="flex items-baseline justify-between text-xs text-fg-muted">
         <span>{label}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-control bg-meter-track">
-        <div className={cn("h-full", METER_FILL[tone])} style={{ width: `${fraction * 100}%` }} />
+      <div className="h-2 overflow-hidden rounded-pill bg-meter-track">
+        <div
+          className={cn("h-full rounded-pill", METER_FILL[tone], METER_GRADIENT[tone])}
+          style={{ width: `${fraction * 100}%` }}
+        />
       </div>
     </div>
   );
@@ -36,7 +40,12 @@ interface GateDialogProps {
 }
 
 /** design-plan.md §6's approval gates and §7's gate entry/confirm motion. Not dismissible
- * (`Dialog`'s `dismissible={false}`): "a gate is answered, not dismissed". */
+ * (`Dialog`'s `dismissible={false}`): "a gate is answered, not dismissed".
+ *
+ * M9h: the sheet is 20px glass with a bloom behind it (Dialog.tsx), the hero figure is a gradient
+ * numeral, the mini-meters take their tone's gradient, and the armed Approve control gains the conic
+ * border. None of the gate's behaviour changed: the 400ms arm, Enter not submitting, a rejection
+ * needing a note, and focus moving to the heading are all as before. */
 export function GateDialog({ gate, onDecide }: GateDialogProps) {
   const [note, setNote] = useState("");
   const [rejectAttempted, setRejectAttempted] = useState(false);
@@ -83,6 +92,7 @@ export function GateDialog({ gate, onDecide }: GateDialogProps) {
   // JSONL that cannot retroactively honour that promise, so this guards the one real skew: an old
   // recording still sitting in web/public/replays/ against a newer frontend build.
   const pendingSpecs = gate.pending_specs ?? [];
+  const GateIcon = gate.gate === "budget" ? Wallet : ShieldCheck;
 
   return (
     <Dialog
@@ -97,7 +107,13 @@ export function GateDialog({ gate, onDecide }: GateDialogProps) {
     >
       <div className="flex flex-col gap-6 p-6">
         <DialogTitle asChild>
-          <h2 ref={headingRef} tabIndex={-1} className="text-lg font-medium text-fg">
+          <h2 ref={headingRef} tabIndex={-1} className="flex items-center gap-3 text-lg font-semibold tracking-tight text-fg">
+            <span
+              aria-hidden="true"
+              className="brand-fill-deep grid size-8 shrink-0 place-items-center rounded-control text-accent-contrast shadow-highlight"
+            >
+              <GateIcon className="size-4" strokeWidth={2.25} />
+            </span>
             {gate.gate} gate
           </h2>
         </DialogTitle>
@@ -106,10 +122,12 @@ export function GateDialog({ gate, onDecide }: GateDialogProps) {
           <div className="flex flex-col gap-5">
             <div>
               <p className="text-xs text-fg-muted">projected spend</p>
+              {/* Same classes as BudgetMeter's hero, deliberately: the §7 gate-confirm "fly" scales one
+                  into the other, and matching type makes that read as one number moving. */}
               <motion.p
                 layoutId={GATE_HERO_LAYOUT_ID}
                 transition={{ duration: 0.42, ease: [0.34, 0.8, 0.28, 1] }}
-                className="num text-2xl text-fg"
+                className="num gradient-text w-fit text-2xl font-medium tracking-tight"
               >
                 {formatUsd(gate.spent_usd + gate.projected_usd)}
               </motion.p>
@@ -145,7 +163,7 @@ export function GateDialog({ gate, onDecide }: GateDialogProps) {
             ) : (
               <div>
                 <p className="text-xs text-fg-muted">winning experiment</p>
-                <p className="num text-2xl text-fg">{gate.best_experiment_id}</p>
+                <p className="num gradient-text w-fit text-2xl font-medium tracking-tight">{gate.best_experiment_id}</p>
                 <p className="text-sm text-fg-secondary">
                   {gate.best_metric_name} {gate.best_metric_value === null ? "" : formatMetric(gate.best_metric_value)}
                 </p>
@@ -169,30 +187,34 @@ export function GateDialog({ gate, onDecide }: GateDialogProps) {
             type="text"
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            className="min-h-11 rounded-control border border-line-control bg-surface-panel px-3 text-sm text-fg frame:min-h-8"
+            className="field w-full"
           />
           {noteInvalid && <p className="text-xs text-status-danger">A rejection needs a note.</p>}
         </div>
 
         <div className="flex justify-end gap-3">
           <Button onClick={reject}>Reject</Button>
-          {/* §7 M9g: the fill still arms in --dur-arm before the control is pressable, but now
-              builds toward the accent-filled primary treatment (Button's `primary` variant) rather
-              than a neutral surface tint — the button visibly becomes the one primary action on
-              screen exactly as it becomes pressable, not before. */}
+          {/* §7 M9g/M9h: the fill still arms in --dur-arm before the control is pressable. While it
+              arms, a soft violet wash fills in left to right; the moment it is armed the control
+              becomes the solid brand gradient with the conic border sweep — the one primary action
+              on screen, visibly becoming real exactly as it becomes pressable, not before. No
+              `overflow-hidden` here: it would clip the conic ring, which sits 2px OUTSIDE the
+              button, so the arm wash rounds its own corners instead. */}
           <button
             type="button"
             disabled={!armed}
             onClick={approve}
             onKeyDown={swallowEnter}
             className={cn(
-              "relative min-h-11 overflow-hidden rounded-control border px-3 text-sm font-medium frame:min-h-8 transition-colors duration-(--dur-quick) ease-out disabled:cursor-not-allowed",
-              armed ? "border-transparent bg-accent text-accent-contrast shadow-raised hover:bg-accent-hover" : "border-line-control text-fg",
+              "relative min-h-11 rounded-control border px-4 text-sm font-medium frame:min-h-8 transition-[background-color,border-color,box-shadow,color] duration-(--dur-quick) ease-out disabled:cursor-not-allowed",
+              armed
+                ? "conic-border brand-fill-deep border-transparent text-accent-contrast shadow-raised hover:shadow-glow-brand"
+                : "border-line-control text-fg",
             )}
           >
             <motion.span
               aria-hidden="true"
-              className="absolute inset-0 origin-left bg-accent-soft"
+              className="absolute inset-0 origin-left rounded-control bg-accent-soft"
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
               transition={{ duration: reducedMotion ? 0 : ARM_MS / 1000, ease: "linear" }}

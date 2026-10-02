@@ -44,10 +44,28 @@ describe("InstrumentBar", () => {
 });
 
 describe("status pills", () => {
-  it("pair every dot with a text label, so colour is never the only carrier (WCAG 1.4.1)", () => {
-    render(<RunStatusPill status="awaiting_approval" />);
+  it("pair every mark with a text label, so colour is never the only carrier (WCAG 1.4.1)", () => {
+    // M9h: the `●` text glyph is now a Chip's mark (an aria-hidden icon or dot) — the assertion that
+    // mattered was "the mark is decoration and the label carries the state", and it still holds.
+    const { container } = render(<RunStatusPill status="awaiting_approval" />);
     expect(screen.getByText("awaiting approval")).toBeInTheDocument();
-    expect(screen.getByText("●")).toHaveAttribute("aria-hidden", "true");
+    const mark = container.querySelector('[aria-hidden="true"]');
+    expect(mark).not.toBeNull();
+    expect(mark).toHaveTextContent("");
+  });
+
+  it("gives only a running run, and only an open live stream, the ping ring", () => {
+    const { container, rerender } = render(<RunStatusPill status="completed" />);
+    expect(container.querySelector(".ping-ring")).toBeNull();
+    rerender(<RunStatusPill status="running" />);
+    expect(container.querySelector(".ping-ring")).not.toBeNull();
+
+    rerender(<StreamHealthPill connection="reconnecting" mode="live" />);
+    expect(container.querySelector(".ping-ring")).toBeNull();
+    rerender(<StreamHealthPill connection="open" mode="live" />);
+    expect(container.querySelector(".ping-ring")).not.toBeNull();
+    rerender(<StreamHealthPill connection="open" mode="replay" />);
+    expect(container.querySelector(".ping-ring")).toBeNull();
   });
 
   it("says so plainly when there is no run status yet", () => {

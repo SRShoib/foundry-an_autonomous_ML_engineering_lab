@@ -1,89 +1,165 @@
-/* foundry operator console — design tokens (docs/design-plan.md §3, §4, §7).
+/* foundry operator console — design tokens (docs/design-plan.md §3, §4, §7, §12).
  *
- * The ONLY file in web/ that may contain a raw colour (styles/no-raw-hex.test.ts enforces it), and
- * plain CSS custom properties rather than Tailwind `@theme`, deliberately: §3 names tokens exactly
- * (--surface-abyss, --team-redteam), the light theme has different VALUES rather than being an
- * inversion, and styles/tokens.contrast.test.ts must parse the real variables — which under
+ * The ONLY file in web/ that may contain a raw colour (styles/design-invariants.test.ts enforces
+ * it), and plain CSS custom properties rather than Tailwind `@theme`, deliberately: §3 names tokens
+ * exactly (--surface-abyss, --team-redteam), the light theme has different VALUES rather than being
+ * an inversion, and styles/tokens.contrast.test.ts must parse the real variables — which under
  * `@theme` only exist after a Tailwind build. theme.css bridges these to Tailwind utilities.
  *
- * Two complete themes: dark ("instrument slate") on :root, light ("datasheet") on
- * :root[data-theme="light"]. Every colour token is defined in BOTH; the contrast test fails if the
- * light block ever inherits a dark value by omission.
+ * Two complete themes: dark ("ink") on :root, light ("porcelain") on :root[data-theme="light"].
+ * Every colour token is defined in BOTH; the contrast test fails if the light block ever inherits a
+ * dark value by omission. M9h ("Aurora", §12) replaced the slate palette with indigo-ink grounds, a
+ * three-stop brand gradient, vivid team/status colour and an ambient aurora; every value below was
+ * COMPUTED against all five grounds before being written (§11), not picked by eye.
+ *
+ * A gradient token may reference other tokens (`var(--brand-1)`) — they resolve on <html>, which is
+ * also where the light block applies, so they follow the theme with no second definition. What a
+ * token must NOT do is hold a `var()` that a descendant is meant to override at runtime (the
+ * spotlight's `--mx`/`--my`): custom properties substitute where they are declared, so that
+ * gradient lives in base.css and only its colour lives here.
  */
 
 :root {
   color-scheme: dark;
 
-  /* §3.1 surfaces — elevation is a hue shift plus a 1px border, never a shadow */
-  --surface-abyss: #0d1117;
-  --surface-deck: #141a22;
-  --surface-panel: #1a212b;
-  --surface-raised: #222b36;
-  --surface-inset: #0f151c;
+  /* §3.1 grounds. The aurora (below) sits on abyss and, through the 70% deck, on the centre column. */
+  --surface-abyss: #0a0c1c;
+  --surface-deck: #0f1228;
+  --surface-panel: #151a33;
+  --surface-raised: #1d2340;
+  --surface-inset: #0b0e20;
 
   /* lines: hairline/strong are decorative; control is the 3:1 boundary for inputs and buttons */
-  --line-hairline: #232c38;
-  --line-strong: #33404f;
-  --line-control: #62798f;
-  --line-focus: #6494f0;
+  --line-hairline: #232a4a;
+  --line-strong: #323a63;
+  --line-control: #6d79ad;
+  --line-focus: #8aa4ff;
 
-  --text-primary: #e6edf5;
-  --text-secondary: #9fb0c3;
-  --text-muted: #8396ab;
+  --text-primary: #eef1ff;
+  --text-secondary: #aab4dc;
+  --text-muted: #8d98c4;
 
-  /* team hues: functional encoding of "who acted" — a 3px rail and a glyph, never a fill */
-  --team-principal: #c9b27a;
-  --team-data: #5fa8c7;
-  --team-modeling: #8c9ee0;
-  --team-runner: #6fb39a;
-  --team-redteam: #e5726d;
-  --team-reporter: #b08cc7;
+  /* team hues: functional encoding of "who acted" — an icon chip, a row wash and the label. Never
+     in the leaderboard or a table. */
+  --team-principal: #f5c76e;
+  --team-data: #4dc4f0;
+  --team-modeling: #9aa6ff;
+  --team-runner: #4fdba5;
+  --team-redteam: #ff6f86;
+  --team-reporter: #d98cff;
 
-  /* status ramp: "what state", deliberately separate from "who". danger === team-redteam because
-     an invalidation IS the danger state. idle is graphic-only, always beside a text label. */
-  --status-ok: #4fb286;
-  --status-warn: #d9a44c;
-  --status-danger: #e5726d;
-  --status-info: #6494f0;
-  --status-idle: #66798d;
+  /* status ramp: "what state", deliberately separate from "who". danger === team-redteam because an
+     invalidation IS the danger state. idle is graphic-only, always beside a text label. */
+  --status-ok: #3ddc97;
+  --status-warn: #ffb84d;
+  --status-danger: #ff6f86;
+  --status-info: #62adff;
+  --status-idle: #6f7aa6;
 
-  /* §3.1 M9g: one deliberate accent for primary actions and focus emphasis ONLY — never team
-     identity, never status. A saturated indigo-violet, chosen at a different hue from
-     --status-info's cooler sky-blue so a primary action never reads as an informational state.
-     Worst-case contrast computed, not eyeballed: --accent 3.17:1 (graphic floor) on
-     --surface-raised; --accent-contrast 4.51:1 against --accent itself (see §11). */
-  --accent: #6a63f0;
-  --accent-hover: #7c74f5;
-  --accent-soft: rgb(106 99 240 / 0.14);
+  /* §3.1 brand: one three-stop gradient is the identity (logo, progress fills, borders, glows, large
+     display numerals) — never behind body text. --accent/--accent-to are the DEEP end: the only part
+     dark enough to carry white text at 4.5:1 (--accent sits in a narrow luminance window: light
+     enough for 3:1 on --surface-raised, dark enough for 4.5:1 under white), which is why a primary
+     button never lightens its fill on hover. */
+  --brand-1: #8b6dff;
+  --brand-2: #5b8cff;
+  --brand-3: #22d3ee;
+  --accent: #6c5cff;
+  --accent-to: #3a64f5;
+  --accent-hover: #8274ff;
+  --accent-soft: rgb(108 92 255 / 0.16);
   --accent-contrast: #ffffff;
 
-  /* budget meter: a continuous quantity gets its own ramp (safe <70%, pressure 70-90%, critical >90%) */
-  --meter-track: #232c38;
-  --meter-safe: #4fb286;
-  --meter-pressure: #d9a44c;
-  --meter-critical: #e5726d;
-  --meter-projected: rgb(217 164 76 / 0.35);
+  /* budget meter: a continuous quantity gets its own ramp (safe <70%, pressure 70-90%, critical >90%).
+     M9h: each tone is a gradient from its status colour to a hotter end colour. */
+  --meter-track: #232a4a;
+  --meter-safe: #3ddc97;
+  --meter-pressure: #ffb84d;
+  --meter-critical: #ff6f86;
+  --meter-pressure-end: #ff8a4c;
+  --meter-critical-end: #ff3d6e;
+  --meter-projected: rgb(255 184 77 / 0.35);
 
-  /* §3.3 shape: radius encodes permanence. A docked panel still carries no shadow at rest — that
-     is unchanged — but M9g replaces the single --shadow-float with a small tokenized ladder so
-     shadow can carry hover/press feedback without ever becoming a resting property of a docked
-     element. All tinted rather than neutral grey. Components reference these tokens exclusively;
-     design-invariants.test.ts's shadows-are-tokenized rule fails any literal box-shadow that isn't
-     var(--shadow-*) or none. */
-  --radius-panel: 3px;
-  --radius-control: 4px;
-  --radius-float: 10px;
+  --gradient-brand: linear-gradient(120deg, var(--brand-1), var(--brand-2) 55%, var(--brand-3));
+  --gradient-brand-deep: linear-gradient(120deg, var(--accent), var(--accent-to));
+  --gradient-border: linear-gradient(
+    150deg,
+    rgb(139 109 255 / 0.55) 0%,
+    rgb(91 140 255 / 0.16) 38%,
+    rgb(50 58 99 / 0.6) 66%,
+    rgb(34 211 238 / 0.26) 100%
+  );
+  /* §8: the red-team category at --text-display. Rose to a hotter crimson, both ends >=4.5:1 on every
+     ground, so it clears the large-text floor with room to spare. */
+  --gradient-danger: linear-gradient(120deg, var(--status-danger), var(--meter-critical-end));
+  --gradient-meter-safe: linear-gradient(90deg, var(--meter-safe), var(--brand-3));
+  --gradient-meter-pressure: linear-gradient(90deg, var(--meter-pressure), var(--meter-pressure-end));
+  --gradient-meter-critical: linear-gradient(90deg, var(--meter-critical), var(--meter-critical-end));
+
+  /* §12.3 ambient: three glows whose centres are far apart (top-left, bottom-right, top-right) and
+     which each fall to transparent by 70%, so no pixel sees more than one near its peak. They sit on
+     abyss/deck only. tokens.contrast.test.ts composites each layer at its PEAK over those grounds and
+     fails the build if text-primary/secondary/muted drops under 4.5:1 (§11 records the first draft,
+     22% over everything, which did).
+     The percentages are of the LAYER, which AmbientBackground insets -15% on every side (so a drift
+     never exposes an edge): the layer is 130% of the viewport, so a layer position p lands at
+     (p * 1.3 - 15)% of the screen. The first draft put the peaks at 10%/6% — just OFF-screen — and
+     only the faint tail showed. These land the peaks at roughly 13%/19% (violet), 89%/92% (cyan) and
+     79%/16% (magenta) of the viewport, where they can actually be seen. */
+  --aurora:
+    radial-gradient(70% 60% at 22% 26%, rgb(124 92 255 / 0.2), transparent 70%),
+    radial-gradient(60% 52% at 80% 82%, rgb(34 211 238 / 0.13), transparent 70%),
+    radial-gradient(52% 46% at 72% 24%, rgb(236 72 153 / 0.08), transparent 70%);
+  /* A fine film grain: texture, and it breaks up banding in dark gradients. White speckle on dark. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* The strength of a feed/roster ROW wash (the `wash` utility, base.css): a tint of the row's team or
+     status hue. A percentage rather than a colour, and per theme, because 8% of a dark hue is a quiet
+     tint on navy but a dirty beige-and-khaki stripe on near-white paper (the first light screenshots
+     showed exactly that), so light restates it lower. tokens.contrast.test.ts reads this real value
+     and holds label, secondary and muted text to 4.5:1 on it. */
+  --wash-row: 8%;
+  /* The spotlight's gradient is built in base.css (see the header); only its colour is a token. It
+     sits on panels and rows, i.e. any of the five grounds, so it carries the tightest alpha. */
+  --spotlight-color: rgb(124 92 255 / 0.12);
+  --bloom-brand: radial-gradient(closest-side, rgb(124 92 255 / 0.2), transparent);
+  --bloom-danger: radial-gradient(closest-side, rgb(255 111 134 / 0.16), transparent);
+  /* The primary button's hover sweep: a transient diagonal highlight, never a resting fill. */
+  --sheen: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.1) 50%, transparent 65%);
+
+  /* §3.3 shape: radius encodes role. Shadows are a tinted ladder; glow is reserved for semantic
+     state (live, running, critical, the red-team moment). Components reference these tokens
+     exclusively — design-invariants.test.ts's shadows-are-tokenized rule fails any literal
+     box-shadow that isn't var(--shadow-*) or none. */
+  --radius-panel: 14px;
+  --radius-control: 10px;
+  --radius-chip: 8px;
+  --radius-float: 20px;
   --radius-pill: 999px;
-  --shadow-highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
-  --shadow-hover: 0 6px 20px -8px rgb(6 10 16 / 0.6);
-  --shadow-raised: 0 10px 28px -10px rgb(6 10 16 / 0.68);
-  --shadow-float: 0 1px 2px rgb(6 10 16 / 0.4), 0 16px 40px -12px rgb(6 10 16 / 0.72);
+  --shadow-highlight: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 14px 34px -18px rgb(3 5 18 / 0.75),
+    0 2px 6px -2px rgb(3 5 18 / 0.5);
+  --shadow-hover: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 12px 30px -12px rgb(3 5 18 / 0.75),
+    0 0 0 1px rgb(124 92 255 / 0.18);
+  --shadow-raised: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 12px 30px -10px rgb(3 5 18 / 0.8);
+  --shadow-float: 0 2px 4px rgb(3 5 18 / 0.5), 0 28px 70px -18px rgb(3 5 18 / 0.85),
+    0 0 0 1px rgb(124 92 255 / 0.14);
+  --shadow-glow-brand: 0 0 0 1px rgb(139 109 255 / 0.4), 0 8px 30px -6px rgb(124 92 255 / 0.6);
+  --shadow-glow-ok: 0 0 0 1px rgb(61 220 151 / 0.35), 0 0 22px -2px rgb(61 220 151 / 0.5);
+  --shadow-glow-warn: 0 0 0 1px rgb(255 184 77 / 0.35), 0 0 22px -2px rgb(255 184 77 / 0.45);
+  --shadow-glow-danger: 0 0 0 1px rgb(255 111 134 / 0.4), 0 0 26px -2px rgb(255 111 134 / 0.5);
+  /* §8: the red-team moment's screen-edge vignette. The only one in the app. It is a full-viewport
+     INSET shadow, so its brightest pixel is the viewport edge at a fraction of its nominal alpha
+     (Phi(spread / (blur / 2)); styles/contrast.ts insetShadowPeak). The first draft, 140px / 8px at
+     0.22, painted only ~11% at the edge — measured in a browser at +27 on the red channel, a rim you
+     had to hunt for. 160px / 60px at the same 0.22 paints ~17%, measured +39 at the edge and still
+     +21 80px in, and tokens.contrast.test.ts holds that PEAK to 4.5:1 for text over abyss, deck and
+     panel (it paints under the top bar and every dialog, so raised can never be beneath it). */
+  --shadow-vignette-danger: inset 0 0 160px 60px rgb(255 111 134 / 0.22);
 
-  /* Glass, for the float layer only (drawers, gate dialogs) — never the docked layer, which must
-     stay legible with nothing rendered behind it. Alpha stays >=0.84 so text inside reads at the
-     contrast already verified for --surface-raised; this is a texture, not a transparency risk. */
-  --surface-glass: rgb(34 43 54 / 0.84);
-  --surface-glass-border: rgb(51 64 79 / 0.7);
+  /* Glass: the float layer (drawers, gate dialogs) and the top bar — never the docked layer. Alpha
+     stays >=0.84 so text inside reads at the contrast already verified for --surface-raised. */
+  --surface-glass: rgb(29 35 64 / 0.86);
+  --surface-glass-border: rgb(50 58 99 / 0.7);
 
   /* 4px grid: 4 8 12 16 24 32 48 64 */
   --space-1: 4px;
@@ -95,12 +171,13 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  /* §4 typefaces. Numbers are always Plex Mono, always tabular (see base.css). */
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
+  /* §4 typefaces (M9h: Geist). Numbers are always Geist Mono, always tabular (see base.css). */
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "Cascadia Code", Menlo, monospace;
   --font-serif: "Newsreader", ui-serif, Georgia, serif;
 
-  /* §4 scale, root 16px. --text-display is reserved: red-team category and the final report metric. */
+  /* §4 scale, root 16px. --text-display is reserved: red-team category and the final report metric
+     (e2e asserts exactly one `.text-display` at those moments — hero numerals use --text-2xl). */
   --text-2xs: 0.6875rem;
   --text-2xs--lh: 1rem;
   --text-xs: 0.75rem;
@@ -135,14 +212,17 @@
   --text-doc-caption: 0.9375rem;
   --text-doc-caption--lh: 1.5rem;
 
-  /* No tracking token above 0.01em: tracked-out caps cannot be reintroduced casually (§4). */
+  /* No POSITIVE tracking token: tracked-out caps cannot be reintroduced casually (§4). Tightening
+     (headings, hero numerals) is allowed. */
   --tracking-normal: 0em;
   --tracking-numeric: 0.01em;
+  --tracking-tight: -0.02em;
 
   /* §7 motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-instrument: cubic-bezier(0.34, 0.8, 0.28, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* M9h: a small overshoot for chips popping in */
   --dur-instant: 90ms;
   --dur-quick: 160ms;
   --dur-base: 240ms;
@@ -150,6 +230,8 @@
   --dur-slow: 420ms;
   --dur-deliberate: 700ms;
   --dur-moment: 1400ms;
+  --dur-sheen: 2400ms; /* M9h: the meter sheen and the primary button's sweep */
+  --dur-ambient: 40s; /* M9h: one slow aurora drift cycle */
   --dur-arm: 400ms; /* §6: the budget/final gate's Approve control fills in before it is pressable */
 
   /* §10 focus: a 2px ring at a 2px offset, never suppressed */
@@ -167,52 +249,101 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* §3.2 "datasheet": cool neutral paper — not an inversion of dark, and explicitly not cream */
-  --surface-abyss: #eef1f5;
-  --surface-deck: #f7f9fb;
+  /* §3.2 "porcelain": cool lavender-tinted paper — not an inversion of dark, and explicitly not cream */
+  --surface-abyss: #eceffb;
+  --surface-deck: #f5f6fd;
   --surface-panel: #ffffff;
   --surface-raised: #ffffff; /* bordered with --line-strong; paper has no hue shift to lift with */
-  --surface-inset: #edf1f5;
+  --surface-inset: #e8ebf8;
 
-  --line-hairline: #dce3eb;
-  --line-strong: #c2cdd9;
-  --line-control: #718aa6;
-  --line-focus: #2a5fc7;
+  --line-hairline: #dfe3f3;
+  --line-strong: #c6cce6;
+  --line-control: #6a76ad;
+  --line-focus: #3f5bd6;
 
-  --text-primary: #131a22;
-  --text-secondary: #45566a;
-  --text-muted: #5a6d83;
+  --text-primary: #12142b;
+  --text-secondary: #444b78;
+  --text-muted: #575f8c;
 
-  --team-principal: #82662a;
-  --team-data: #1f6f91;
-  --team-modeling: #4a5cb0;
-  --team-runner: #2a775e;
-  --team-redteam: #c0342e;
-  --team-reporter: #7a4f94;
+  /* principal, runner and red team are a shade darker than their first draft: a feed label sits on
+     an 8% wash of its OWN hue, which costs ~0.5:1, and the first values (#85600f, #0f7656, #c42b48)
+     fell to 4.50 / 4.38 / 4.29 there. Now 4.92 / 5.12 / 4.94 (tokens.contrast.test.ts, §11). */
+  --team-principal: #7d5a0d;
+  --team-data: #0a6a8f;
+  --team-modeling: #4652c4;
+  --team-runner: #0b6a4d;
+  --team-redteam: #b4253f;
+  --team-reporter: #8339bd;
 
-  --status-ok: #1f7a55;
-  --status-warn: #8e620e;
-  --status-danger: #c0342e;
-  --status-info: #2a5fc7;
-  --status-idle: #6b7d91;
+  /* --status-ok joins the darkened set: the feed's "done" row labels itself in this green on an 8% wash
+     of the same green, and the first value (#0e7550) fell to 4.46 on the page ground. */
+  --status-ok: #0b6d49;
+  --status-warn: #8a5805;
+  --status-danger: #b4253f;
+  --status-info: #2358d4;
+  --status-idle: #6a7399;
 
-  /* Same hue family as dark's --accent, darkened to hold 3:1 on white paper the same way every
-     other light-theme hue in this file is darkened rather than lightened (§3.2). */
-  --accent: #4c3fe0;
-  --accent-hover: #4335c9;
-  --accent-soft: rgb(76 63 224 / 0.08);
+  /* Same hue family as dark, darkened to hold 3:1 on white paper the same way every other
+     light-theme hue in this file is darkened rather than lightened (§3.2). */
+  --brand-1: #6f4df0;
+  --brand-2: #3b6be8;
+  --brand-3: #0a8fb0;
+  --accent: #5440e6;
+  --accent-to: #2f56e0;
+  --accent-hover: #4a38d4;
+  --accent-soft: rgb(84 64 230 / 0.09);
   --accent-contrast: #ffffff;
 
   /* §3.2 leaves the meter ramp implicit: it reuses the status hues, exactly as dark does */
-  --meter-track: #dce3eb;
-  --meter-safe: #1f7a55;
-  --meter-pressure: #8e620e;
-  --meter-critical: #c0342e;
-  --meter-projected: rgb(142 98 14 / 0.35);
+  --meter-track: #dfe3f3;
+  --meter-safe: #0b6d49;
+  --meter-pressure: #8a5805;
+  --meter-critical: #b4253f;
+  --meter-pressure-end: #b3470b;
+  --meter-critical-end: #dc2450;
+  --meter-projected: rgb(138 88 5 / 0.35);
 
-  /* --shadow-* is intentionally NOT redefined here, same precedent as --shadow-float already set:
-     a dark-tinted shadow at low alpha still reads correctly on paper. --surface-glass IS redefined
-     — it is a surface color, not a shadow, and §3.2's "never inherit a colour from dark" applies. */
+  /* --gradient-brand/-brand-deep/-meter-* follow the colour tokens above; only the hairline names
+     literal stops, so it is the one gradient the light theme restates. */
+  --gradient-border: linear-gradient(
+    150deg,
+    rgb(111 77 240 / 0.45) 0%,
+    rgb(59 107 232 / 0.14) 38%,
+    rgb(198 204 230 / 0.8) 66%,
+    rgb(10 143 176 / 0.28) 100%
+  );
+
+  /* Pastel aurora: lower alphas than dark, because the same alpha over a LIGHT ground loses contrast
+     faster (§11: 14% violet already failed). Dark speckle for the grain, white would vanish. */
+  --aurora:
+    radial-gradient(70% 60% at 22% 26%, rgb(111 77 240 / 0.12), transparent 70%),
+    radial-gradient(60% 52% at 80% 82%, rgb(10 143 176 / 0.08), transparent 70%),
+    radial-gradient(52% 46% at 72% 24%, rgb(236 72 153 / 0.05), transparent 70%);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --wash-row: 5%;
+  --spotlight-color: rgb(111 77 240 / 0.08);
+  --bloom-brand: radial-gradient(closest-side, rgb(111 77 240 / 0.1), transparent);
+  --bloom-danger: radial-gradient(closest-side, rgb(180 37 63 / 0.08), transparent);
+  /* A stronger white sweep than dark's: on a light skeleton or a pale meter a 10% white is invisible. */
+  --sheen: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.45) 50%, transparent 65%);
+
+  /* A dark, heavy cast reads as dirt on paper, so every shadow is restated as a low-alpha indigo. */
+  --shadow-highlight: inset 0 1px 0 rgb(255 255 255 / 0.9);
+  --shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 10px 28px -16px rgb(40 48 120 / 0.22),
+    0 1px 3px rgb(40 48 120 / 0.08);
+  --shadow-hover: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 14px 32px -14px rgb(40 48 120 / 0.28),
+    0 0 0 1px rgb(111 77 240 / 0.22);
+  --shadow-raised: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 12px 26px -10px rgb(40 48 120 / 0.4);
+  --shadow-float: 0 2px 6px rgb(40 48 120 / 0.1), 0 28px 64px -18px rgb(40 48 120 / 0.32),
+    0 0 0 1px rgb(111 77 240 / 0.12);
+  --shadow-glow-brand: 0 0 0 1px rgb(111 77 240 / 0.35), 0 8px 26px -6px rgb(84 64 230 / 0.45);
+  --shadow-glow-ok: 0 0 0 1px rgb(14 117 80 / 0.3), 0 0 18px -2px rgb(14 117 80 / 0.3);
+  --shadow-glow-warn: 0 0 0 1px rgb(138 88 5 / 0.3), 0 0 18px -2px rgb(138 88 5 / 0.28);
+  --shadow-glow-danger: 0 0 0 1px rgb(180 37 63 / 0.35), 0 0 22px -2px rgb(180 37 63 / 0.3);
+  --shadow-vignette-danger: inset 0 0 160px 60px rgb(180 37 63 / 0.12);
+
+  /* --surface-glass IS redefined — it is a surface colour, and §3.2's "never inherit a colour from
+     dark" applies. */
   --surface-glass: rgb(255 255 255 / 0.86);
-  --surface-glass-border: rgb(194 205 217 / 0.7);
+  --surface-glass-border: rgb(198 204 230 / 0.7);
 }

@@ -1,4 +1,5 @@
-import { useId } from "react";
+import { Pause, Play } from "lucide-react";
+import { useId, type CSSProperties } from "react";
 import { motion } from "motion/react";
 
 import { cn } from "../lib/cn";
@@ -19,20 +20,14 @@ interface ViewProps {
 
 const SCRUB_STEPS = 1000;
 
+/** Filled, not outlined: a transport glyph reads as a solid control, and lucide's stroke-only
+ * default would look hollow next to the filled Sun/Moon-sized buttons around it. */
 function PlayIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16" className="shrink-0" fill="currentColor">
-      <path d="M4 2.5v11l9-5.5z" />
-    </svg>
-  );
+  return <Play aria-hidden="true" className="size-4 shrink-0" fill="currentColor" strokeWidth={2} />;
 }
 
 function PauseIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16" className="shrink-0" fill="currentColor">
-      <path d="M3.5 2.5h3.5v11H3.5zM9 2.5h3.5v11H9z" />
-    </svg>
-  );
+  return <Pause aria-hidden="true" className="size-4 shrink-0" fill="currentColor" strokeWidth={2} />;
 }
 
 /** The replay controls of docs/design-plan.md §5: play/pause, 1× 4× 16×, and a scrubber. Speed is
@@ -71,7 +66,7 @@ export function ReplayTransportView({ transport, onPlay, onPause, onSpeed, onSee
               <motion.span
                 aria-hidden="true"
                 layoutId={pillId}
-                className="absolute inset-0 rounded-pill border border-line-control bg-surface-raised shadow-highlight"
+                className="absolute inset-0 rounded-pill bg-accent-soft shadow-highlight ring-1 ring-inset ring-accent-hover/60"
                 transition={{ duration: 0.24, ease: [0.65, 0, 0.35, 1] }}
               />
             )}
@@ -98,7 +93,10 @@ export function ReplayTransportView({ transport, onPlay, onPause, onSpeed, onSee
         disabled={locked === true}
         aria-label="Replay position"
         aria-valuetext={`${formatClock(elapsedS)} of ${formatClock(durationS)}`}
-        className="hidden h-1 w-40 accent-accent frame:block"
+        // `range-brand` (styles/base.css) draws the filled track from --fill, a percentage the
+        // component owns; the thumb and track are tokenized there, replacing the browser default.
+        style={{ "--fill": `${(fraction * 100).toFixed(1)}%` } as CSSProperties}
+        className="range-brand hidden w-40 frame:block"
       />
       <span className="num hidden whitespace-nowrap text-xs text-fg-muted sm:inline">
         {formatClock(elapsedS)} / {formatClock(durationS)}

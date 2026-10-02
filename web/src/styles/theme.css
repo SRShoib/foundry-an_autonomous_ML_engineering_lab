@@ -8,8 +8,11 @@
  * its value, so `bg-surface-panel` follows `:root[data-theme="light"]` with no second definition.
  * tokens.css stays the single source of truth, named exactly as docs/design-plan.md names them.
  *
- * Tailwind's own palette, type scale, radii, shadows and easings are reset first, so a raw
- * `bg-red-500`, `rounded-xl` or `shadow-lg` is not merely discouraged — it does not exist. */
+ * Tailwind's own palette, type scale, radii, shadows, easings and animations are reset first, so a
+ * raw `bg-red-500`, `rounded-xl`, `shadow-lg` or `animate-bounce` is not merely discouraged — it
+ * does not exist. (M9h: `--animate-*` joins the list. Every animation the console uses is its own
+ * `@utility` in base.css, built from the --dur and --ease tokens, and switched off explicitly under
+ * prefers-reduced-motion.) */
 @theme {
   --color-*: initial;
   --text-*: initial;
@@ -18,6 +21,7 @@
   --shadow-*: initial;
   --ease-*: initial;
   --tracking-*: initial;
+  --animate-*: initial;
 
   /* §5: the three-column frame needs 216 + 480 + 340 plus gutters; below this it collapses to the
      44px instrument bar and tabs. `frame:` is the variant. */
@@ -58,9 +62,15 @@
   --color-meter-safe: var(--meter-safe);
   --color-meter-pressure: var(--meter-pressure);
   --color-meter-critical: var(--meter-critical);
+  --color-meter-pressure-end: var(--meter-pressure-end);
+  --color-meter-critical-end: var(--meter-critical-end);
   --color-meter-projected: var(--meter-projected);
 
+  --color-brand-1: var(--brand-1);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
   --color-accent: var(--accent);
+  --color-accent-to: var(--accent-to);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
   --color-accent-contrast: var(--accent-contrast);
@@ -70,12 +80,19 @@
 
   --radius-panel: var(--radius-panel);
   --radius-control: var(--radius-control);
+  --radius-chip: var(--radius-chip);
   --radius-float: var(--radius-float);
   --radius-pill: var(--radius-pill);
   --shadow-highlight: var(--shadow-highlight);
+  --shadow-panel: var(--shadow-panel);
   --shadow-hover: var(--shadow-hover);
   --shadow-raised: var(--shadow-raised);
   --shadow-float: var(--shadow-float);
+  --shadow-glow-brand: var(--shadow-glow-brand);
+  --shadow-glow-ok: var(--shadow-glow-ok);
+  --shadow-glow-warn: var(--shadow-glow-warn);
+  --shadow-glow-danger: var(--shadow-glow-danger);
+  --shadow-vignette-danger: var(--shadow-vignette-danger);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -102,8 +119,10 @@
 
   --tracking-normal: var(--tracking-normal);
   --tracking-numeric: var(--tracking-numeric);
+  --tracking-tight: var(--tracking-tight);
 
   --ease-out: var(--ease-out);
   --ease-in-out: var(--ease-in-out);
   --ease-instrument: var(--ease-instrument);
+  --ease-spring: var(--ease-spring);
 }

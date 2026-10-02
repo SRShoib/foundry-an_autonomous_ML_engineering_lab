@@ -1,3 +1,4 @@
+import { Activity, ShieldAlert, Trophy } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -11,6 +12,7 @@ import { InstrumentBar } from "../app/InstrumentBar";
 import { InvalidationConnector } from "../app/InvalidationConnector";
 import { Leaderboard } from "../app/Leaderboard";
 import { MobileTabs, panelId, tabId, type Tab } from "../app/MobileTabs";
+import { RedTeamVignette } from "../app/RedTeamVignette";
 import { DivergenceNotice } from "../app/ReplayTransport";
 import { RunRail } from "../app/RunRail";
 import { TopBar, type Meta } from "../app/TopBar";
@@ -132,15 +134,20 @@ export function RunView({
         aria-labelledby={tabId("activity")}
         className="flex min-h-full flex-col"
       >
-        <div className="flex items-baseline justify-between gap-3 border-b border-line-hairline px-4 py-3">
-          <h1 className="text-md font-medium text-fg">activity</h1>
-          <div className="flex items-baseline gap-3">
+        <div className="flex items-center justify-between gap-3 border-b border-line-hairline px-4 py-3">
+          <h1 className="flex items-center gap-2 text-md font-semibold tracking-tight text-fg">
+            <Activity aria-hidden="true" className="size-4 text-fg-muted" strokeWidth={2.25} />
+            activity
+          </h1>
+          <div className="flex items-center gap-3">
             {reportHref !== undefined && status !== null && status.report_md !== null && (
               <Button asChild variant="quiet">
                 <Link to={reportHref}>View report</Link>
               </Button>
             )}
-            <span className="num text-xs text-fg-muted">{feed.visible.length} events</span>
+            <span className="num rounded-pill bg-surface-raised px-2 py-0.5 text-xs text-fg-secondary">
+              {feed.visible.length} events
+            </span>
           </div>
         </div>
 
@@ -183,6 +190,9 @@ export function RunView({
         />
       )}
 
+      {/* §8 (revised M9h): the red-team moment's screen-edge vignette — the only one in the app. */}
+      <RedTeamVignette choreography={choreography} />
+
       <LiveRegion message={announcement} />
     </AppFrame>
   );
@@ -205,18 +215,21 @@ export function RunViewSkeleton({ error }: { error?: ReactNode }) {
       dock={
         <div className="flex flex-col gap-4">
           <BudgetMeter status={null} />
-          <Panel title="leaderboard">
+          <Panel title="leaderboard" icon={Trophy}>
             <SkeletonLines lines={4} />
           </Panel>
-          <Panel title="audit">
+          <Panel title="audit" icon={ShieldAlert}>
             <SkeletonLines lines={3} />
           </Panel>
         </div>
       }
     >
       <div className="flex min-h-full flex-col">
-        <div className="flex items-baseline justify-between border-b border-line-hairline px-4 py-3">
-          <h1 className="text-md font-medium text-fg">activity</h1>
+        <div className="flex items-center justify-between border-b border-line-hairline px-4 py-3">
+          <h1 className="flex items-center gap-2 text-md font-semibold tracking-tight text-fg">
+            <Activity aria-hidden="true" className="size-4 text-fg-muted" strokeWidth={2.25} />
+            activity
+          </h1>
         </div>
         <div className="p-4">{error ?? <SkeletonLines lines={8} />}</div>
       </div>

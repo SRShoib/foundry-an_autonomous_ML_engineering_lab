@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from "react";
 
+import { AmbientBackground } from "../components/ui/AmbientBackground";
 import { cn } from "../lib/cn";
 
 interface AppFrameProps {
@@ -47,7 +48,11 @@ export function AppFrame({
 }: AppFrameProps) {
   const deenergizedClass = "transition-[filter,opacity] duration-(--dur-base) ease-out saturate-[.4] opacity-70";
   return (
-    <div className="flex h-dvh flex-col bg-surface-abyss text-fg frame:grid frame:grid-cols-[var(--layout-rail)_minmax(var(--layout-center-min),1fr)_var(--layout-dock)] frame:grid-rows-[auto_minmax(0,1fr)]">
+    // `isolate` gives this root its own stacking context: AmbientBackground's `-z-10` layer then
+    // paints above the root's ground and below its content, instead of behind the ground (where it
+    // would not show). The layer is `fixed`, so it takes no grid cell.
+    <div className="isolate flex h-dvh flex-col bg-surface-abyss text-fg frame:grid frame:grid-cols-[var(--layout-rail)_minmax(var(--layout-center-min),1fr)_var(--layout-dock)] frame:grid-rows-[auto_minmax(0,1fr)]">
+      <AmbientBackground />
       <header className="frame:col-span-3">{topBar}</header>
 
       <div className={cn("frame:hidden", deenergized && deenergizedClass)}>
@@ -69,7 +74,10 @@ export function AppFrame({
         id="main"
         ref={mainRef}
         className={cn(
-          "min-h-0 min-w-0 flex-1 overflow-y-auto bg-surface-deck frame:block",
+          // M9h: the deck at 60%, so the aurora glows through the centre column. Text on it is held
+          // to AA by the wash test (each aurora layer at its PEAK over a fully opaque deck — far
+          // stronger than the sliver of it that reaches through a 60% deck), not by an opaque ground.
+          "min-h-0 min-w-0 flex-1 overflow-y-auto bg-surface-deck/60 frame:block",
           mobileView !== "main" && "hidden",
           deenergized && deenergizedClass,
         )}

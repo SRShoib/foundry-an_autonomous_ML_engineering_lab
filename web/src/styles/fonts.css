@@ -1,11 +1,12 @@
-/* docs/design-plan.md §4. Self-hosted through Fontsource, latin subset only — no third-party font
- * CDN, so the console renders identically offline and during a replay demo with the API stopped.
- * Weights stop at 600; there is no 700 anywhere. Newsreader is confined to the report view and
- * model card (M9e). */
-@import "@fontsource/ibm-plex-sans/latin-400.css";
-@import "@fontsource/ibm-plex-sans/latin-500.css";
-@import "@fontsource/ibm-plex-sans/latin-600.css";
-@import "@fontsource/ibm-plex-mono/latin-400.css";
-@import "@fontsource/ibm-plex-mono/latin-500.css";
+/* docs/design-plan.md §4 (revised M9h). Self-hosted through Fontsource — no third-party font CDN, so
+ * the console renders identically offline and during a replay demo with the API stopped.
+ *
+ * Geist and Geist Mono are VARIABLE fonts (one file per unicode subset, weight axis 100–900). The
+ * package's wght.css declares every subset with a `unicode-range`, so the browser downloads only the
+ * latin file this UI actually needs; the others are bundled but never fetched. Weights stop at 600
+ * in use — there is no 700 anywhere (styles/design-invariants.test.ts). Newsreader is confined to the
+ * report view and model card (M9e). */
+@import "@fontsource-variable/geist/wght.css";
+@import "@fontsource-variable/geist-mono/wght.css";
 @import "@fontsource/newsreader/latin-400.css";
 @import "@fontsource/newsreader/latin-500.css";

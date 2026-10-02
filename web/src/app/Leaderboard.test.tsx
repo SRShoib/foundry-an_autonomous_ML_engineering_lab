@@ -98,7 +98,10 @@ describe("Leaderboard", () => {
 
     const rows = within(screen.getByRole("list")).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("exp-001");
-    expect(rows[0]).toHaveTextContent("⊘");
+    // M9h: the ⊘ text glyph is now lucide's `Ban` icon (an aria-hidden svg) beside an sr-only
+    // "invalidated" — assert what carries the state, not the character it used to be drawn with.
+    expect(rows[0]).toHaveTextContent("invalidated");
+    expect(rows[0]?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     expect(rows[0]?.querySelector(".line-through")).not.toBeNull();
   });
 
@@ -112,6 +115,22 @@ describe("Leaderboard", () => {
     act(() =>
       rerender(<Leaderboard status={status} choreography={{ phase: "connect", finding }} onOpen={vi.fn()} />),
     );
-    expect(screen.queryByText("⊘")).not.toBeInTheDocument();
+    expect(screen.queryByText("invalidated")).not.toBeInTheDocument();
+  });
+
+  it("marks #1 as the winner with the brand fill and nothing else, and draws no team hue", () => {
+    const status = makeRunStatus({ leaderboard: [entry(1, "exp-001"), entry(2, "exp-002", 0.45)] });
+    render(<Leaderboard status={status} choreography={IDLE} onOpen={vi.fn()} />);
+    const [first, second] = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(first?.querySelector(".brand-fill-deep")).not.toBeNull();
+    expect(second?.querySelector(".brand-fill-deep")).toBeNull();
+  });
+
+  it("draws each row's data bar as its metric's share of the best, so the winner's is full width", () => {
+    const status = makeRunStatus({ leaderboard: [entry(1, "exp-001", 0.8), entry(2, "exp-002", 0.4)] });
+    render(<Leaderboard status={status} choreography={IDLE} onOpen={vi.fn()} />);
+    const [first, second] = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(first?.querySelector(".bg-accent-soft")).toHaveStyle({ width: "100%" });
+    expect(second?.querySelector(".bg-accent-soft")).toHaveStyle({ width: "50%" });
   });
 });
