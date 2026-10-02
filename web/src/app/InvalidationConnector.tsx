@@ -67,6 +67,24 @@ export function InvalidationConnector({ containerRef, choreography }: ConnectorP
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 z-10 hidden h-full w-full overflow-visible frame:block"
     >
+      {/* M9h: a soft, wide glow underlay drawn with the same path animation. It deliberately uses
+          `stroke-status-danger` — the same colour, a DIFFERENT class — because `.stroke-team-redteam`
+          is the connector's one e2e hook and must still match exactly one element. */}
+      <motion.line
+        key={`${experimentId}-glow`}
+        data-connector-glow=""
+        x1={points.x1}
+        y1={points.y1}
+        x2={points.x2}
+        y2={points.y2}
+        className="stroke-status-danger"
+        strokeWidth={8}
+        strokeOpacity={0.22}
+        strokeLinecap="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      />
       <motion.line
         key={experimentId}
         x1={points.x1}
@@ -75,6 +93,7 @@ export function InvalidationConnector({ containerRef, choreography }: ConnectorP
         y2={points.y2}
         className="stroke-team-redteam"
         strokeWidth={2}
+        strokeLinecap="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}

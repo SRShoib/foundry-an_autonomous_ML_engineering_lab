@@ -1,3 +1,4 @@
+import { ArrowDown, CircleCheck, CircleDot, Hourglass, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion } from "motion/react";
@@ -7,6 +8,7 @@ import { EmptyState } from "../components/states/EmptyState";
 import { SkeletonLines } from "../components/states/Skeleton";
 import { cn } from "../lib/cn";
 import { formatTime, formatUsdPrecise } from "../lib/format";
+import { WASH } from "../lib/wash";
 import { TEAM_META, teamForEvent } from "../run/teams";
 
 const EASE_OUT: readonly [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -16,7 +18,7 @@ const EASE_OUT: readonly [number, number, number, number] = [0.16, 1, 0.3, 1];
  * jsdom's tests, never cross it, since a virtualizer measuring 0-height rows (jsdom lays out
  * nothing) cannot be asserted against meaningfully anyway. */
 export const VIRTUALIZE_ABOVE = 60;
-const ROW_ESTIMATE_PX = 56;
+const ROW_ESTIMATE_PX = 60; // M9h: icon-chip rows are a little taller than the old two-line rows (was 56)
 /** How far from the bottom (px) still counts as "at the bottom" for follow-mode. */
 const FOLLOW_THRESHOLD_PX = 48;
 
@@ -44,9 +46,13 @@ interface RowStyle {
   textClass: string;
   railClass: string;
   railWidthPx: number;
+  /** M9h: the row's identity icon, its 15% chip classes (icon in the tone colour) and its 8% wash. */
+  Icon: LucideIcon;
+  chipClass: string;
+  washClass: string;
 }
 
-/** A team's own hue and glyph when the event is one of its turns; otherwise the status ramp — an
+/** A team's own hue and icon when the event is one of its turns; otherwise the status ramp — an
  * interrupt, a terminal `done`/`error`, or a `node` event for something with no team of its own
  * (`final_gate`, `lesson_writer`, or an unrecognised future node), which shows its own name rather
  * than inventing a team for it. */
@@ -54,43 +60,112 @@ export function feedRowStyle(event: ActivityEvent): RowStyle {
   const team = teamForEvent(event);
   if (team !== null) {
     const meta = TEAM_META[team];
-    return { label: meta.label, textClass: meta.text, railClass: meta.railBg, railWidthPx: meta.railWidth === "thick" ? 5 : 3 };
+    return {
+      label: meta.label,
+      textClass: meta.text,
+      railClass: meta.railBg,
+      railWidthPx: meta.railWidth === "thick" ? 5 : 3,
+      Icon: meta.Icon,
+      chipClass: meta.chip,
+      washClass: meta.wash,
+    };
   }
   if (event.kind === "interrupt") {
-    return { label: "interrupt", textClass: "text-status-warn", railClass: "bg-status-warn", railWidthPx: 3 };
+    return {
+      label: "interrupt",
+      textClass: "text-status-warn",
+      railClass: "bg-status-warn",
+      railWidthPx: 3,
+      Icon: Hourglass,
+      chipClass: "bg-status-warn/15 text-status-warn",
+      washClass: WASH.warn,
+    };
   }
   if (event.kind === "done") {
-    return { label: "done", textClass: "text-status-ok", railClass: "bg-status-ok", railWidthPx: 3 };
+    return {
+      label: "done",
+      textClass: "text-status-ok",
+      railClass: "bg-status-ok",
+      railWidthPx: 3,
+      Icon: CircleCheck,
+      chipClass: "bg-status-ok/15 text-status-ok",
+      washClass: WASH.ok,
+    };
   }
   if (event.kind === "error") {
-    return { label: "error", textClass: "text-status-danger", railClass: "bg-status-danger", railWidthPx: 3 };
+    return {
+      label: "error",
+      textClass: "text-status-danger",
+      railClass: "bg-status-danger",
+      railWidthPx: 3,
+      Icon: TriangleAlert,
+      chipClass: "bg-status-danger/15 text-status-danger",
+      washClass: WASH.danger,
+    };
   }
   return {
     label: (event.node ?? "system").replace(/_/g, " "),
     textClass: "text-fg-muted",
     railClass: "bg-status-idle",
     railWidthPx: 3,
+    Icon: CircleDot,
+    chipClass: "bg-status-idle/15 text-status-idle",
+    washClass: "",
   };
 }
 
 /** The row's inner markup only — no wrapping `<li>` — so the two ways a row gets positioned
  * (framer-motion's enter animation below the virtualization threshold, react-virtual's own
- * transform above it) never have to fight over which one owns the element's `transform`. */
-function FeedRowContent({ event, setsize, posinset }: { event: ActivityEvent; setsize: number; posinset: number }) {
+ * transform above it) never have to fight over which one owns the element's `transform`.
+ *
+ * M9h: an identity icon chip leads the row, and a row that has JUST arrived (`arrival`) emits a
+ * one-shot ping from that chip — a currentColor disc that scales and fades over 1.2s. It animates
+ * only opacity and scale and reuses the chip's own token colour, so it adds no new alpha to verify;
+ * the §7 batch, stagger and virtualization rules for the row itself are untouched. */
+function FeedRowContent({
+  event,
+  setsize,
+  posinset,
+  arrival = false,
+}: {
+  event: ActivityEvent;
+  setsize: number;
+  posinset: number;
+  arrival?: boolean;
+}) {
   const style = feedRowStyle(event);
+  const Icon = style.Icon;
   return (
     <>
       <span aria-hidden="true" className={cn("absolute inset-y-0 left-0", style.railClass)} style={{ width: style.railWidthPx }} />
-      <div className="flex items-baseline gap-2 pl-4 pr-3 text-sm">
-        <span className={cn("num shrink-0 text-2xs", style.textClass)} aria-hidden="true">
-          {String(event.seq).padStart(3, "0")}
+      <div className="flex items-start gap-2.5 pl-4 pr-3 text-sm">
+        <span
+          aria-hidden="true"
+          className={cn("relative mt-0.5 grid size-6 shrink-0 place-items-center rounded-chip", style.chipClass)}
+        >
+          {arrival && (
+            <motion.span
+              className="absolute inset-0 rounded-chip bg-current"
+              initial={{ opacity: 0.45, scale: 1 }}
+              animate={{ opacity: 0, scale: 1.9 }}
+              transition={{ duration: 1.2, ease: EASE_OUT }}
+            />
+          )}
+          <Icon className="relative size-3.5" strokeWidth={2.25} />
         </span>
-        <span className={cn("shrink-0 font-medium", style.textClass)}>{style.label}</span>
-        <span className="min-w-0 flex-1 truncate text-fg">{event.summary}</span>
-      </div>
-      <div className="mt-0.5 flex items-baseline justify-between pl-[3.25rem] pr-3 text-xs text-fg-muted">
-        <span className="num">{formatTime(event.ts)}</span>
-        {event.spent_usd === null ? null : <span className="num text-fg-secondary">{formatUsdPrecise(event.spent_usd)}</span>}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className={cn("num shrink-0 text-2xs", style.textClass)} aria-hidden="true">
+              {String(event.seq).padStart(3, "0")}
+            </span>
+            <span className={cn("shrink-0 font-medium", style.textClass)}>{style.label}</span>
+            <span className="min-w-0 flex-1 truncate text-fg">{event.summary}</span>
+          </div>
+          <div className="mt-0.5 flex items-baseline justify-between text-xs text-fg-muted">
+            <span className="num">{formatTime(event.ts)}</span>
+            {event.spent_usd === null ? null : <span className="num text-fg-secondary">{formatUsdPrecise(event.spent_usd)}</span>}
+          </div>
+        </div>
       </div>
       <span className="sr-only">{`, item ${posinset} of ${setsize}`}</span>
     </>
@@ -117,6 +192,7 @@ function AnimatedFeedRow({
   delayS: number;
 }) {
   const initial = animate ? (profile.slide ? { opacity: 0, y: 4 } : { opacity: 0 }) : false;
+  const style = feedRowStyle(event);
   return (
     <motion.li
       role="listitem"
@@ -125,9 +201,12 @@ function AnimatedFeedRow({
       initial={initial}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: profile.durationS, ease: EASE_OUT, delay: animate ? delayS : 0 }}
-      className="relative border-b border-line-hairline py-2"
+      className={cn(
+        "relative border-b border-line-hairline py-2.5 transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised",
+        style.washClass,
+      )}
     >
-      <FeedRowContent event={event} setsize={setsize} posinset={posinset} />
+      <FeedRowContent event={event} setsize={setsize} posinset={posinset} arrival={animate} />
     </motion.li>
   );
 }
@@ -152,6 +231,7 @@ function VirtualFeedRow({
   dataIndex: number;
   measureRef: (el: Element | null) => void;
 }) {
+  const style = feedRowStyle(event);
   return (
     <li
       role="listitem"
@@ -159,7 +239,10 @@ function VirtualFeedRow({
       aria-posinset={posinset}
       data-index={dataIndex}
       ref={measureRef}
-      className="absolute left-0 top-0 w-full border-b border-line-hairline py-2"
+      className={cn(
+        "absolute left-0 top-0 w-full border-b border-line-hairline py-2.5 transition-colors duration-(--dur-quick) ease-out hover:bg-surface-raised",
+        style.washClass,
+      )}
       style={{ transform: `translateY(${start}px)` }}
     >
       <FeedRowContent event={event} setsize={setsize} posinset={posinset} />
@@ -295,9 +378,11 @@ export function ActivityFeed({
         <button
           type="button"
           onClick={goLive}
-          className="sticky bottom-3 left-1/2 num inline-flex -translate-x-1/2 items-center gap-1.5 rounded-pill border border-line-control bg-surface-raised px-3 py-1.5 text-xs text-fg shadow-float transition-[background-color,border-color,color] duration-(--dur-quick) ease-out hover:border-accent hover:bg-accent hover:text-accent-contrast"
+          // M9h: an opaque raised pill (no backdrop blur — that budget belongs to the top bar and
+          // the float layer) that lights up in the brand glow on hover; the arrow is a lucide icon.
+          className="sticky bottom-3 left-1/2 num inline-flex -translate-x-1/2 items-center gap-1.5 rounded-pill border border-line-control bg-surface-raised px-3 py-1.5 text-xs text-fg shadow-float transition-[border-color,box-shadow] duration-(--dur-quick) ease-out hover:border-accent-hover hover:shadow-glow-brand"
         >
-          <span aria-hidden="true">▼</span> live
+          <ArrowDown aria-hidden="true" className="size-3.5" strokeWidth={2.5} /> live
         </button>
       )}
     </div>

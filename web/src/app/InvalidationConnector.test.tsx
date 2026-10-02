@@ -31,6 +31,14 @@ describe("InvalidationConnector", () => {
     expect(container.querySelector("svg line")).not.toBeNull();
   });
 
+  it("adds a glow underlay but keeps `.stroke-team-redteam` on exactly ONE element (the e2e hook is strict)", () => {
+    const { container } = render(<Harness choreography={{ phase: "connect", finding }} />);
+    expect(container.querySelectorAll(".stroke-team-redteam")).toHaveLength(1);
+    const glow = container.querySelector("[data-connector-glow]");
+    expect(glow).not.toBeNull();
+    expect(glow).not.toHaveClass("stroke-team-redteam");
+  });
+
   it("draws nothing when the audit anchor for THIS finding is not in the DOM", () => {
     function NoAnchor() {
       const ref = useRef<HTMLDivElement>(null);

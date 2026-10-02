@@ -9,6 +9,12 @@
     /* Fonts must never re-flow the frame on load (§5 "no layout shift"). */
     text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
+    /* Light type on a dark ground renders heavier by default; this is the standard correction. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* M9h: thin, tokenized scrollbars everywhere instead of the platform's grey slab. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
   }
 
   body {
@@ -29,8 +35,8 @@
   }
 
   ::selection {
-    background-color: var(--surface-raised);
-    color: var(--text-primary);
+    background-color: var(--accent);
+    color: var(--accent-contrast);
   }
 
   /* §7: prefers-reduced-motion swaps every entry to instant. Motion components additionally honour
@@ -86,10 +92,10 @@
   animation: bar-complete var(--dur-settle) var(--ease-out) both;
 }
 
-/* §9, revised M9g: a SINGLE skeleton block now carries a slow opacity sweep rather than staying
-   inert — the original objection ("a moving highlight on a dozen blocks is decoration") still
-   holds for a dense grid, so this stays slow (--dur-moment) and opacity-only, never a bright
-   shimmer gradient, and reads as one still-legible surface even with several on screen at once. */
+/* §9, revised M9g then M9h: a skeleton block carries a slow opacity pulse (M9g) plus, since M9h, a
+   soft travelling highlight on top of it. Both are slow (--dur-moment) and low-contrast, so a dense
+   grid of them still reads as one calm surface. The highlight lives in this utility's ::after so
+   no `animate-`, `shimmer` or `pulse` class name ever appears in markup (states.test.tsx). */
 @keyframes skeleton-sweep {
   0%,
   100% {
@@ -100,8 +106,35 @@
   }
 }
 
+@keyframes skeleton-travel {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @utility skeleton-sweep {
+  position: relative;
+  overflow: hidden;
   animation: skeleton-sweep var(--dur-moment) var(--ease-in-out) infinite;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--sheen);
+    animation: skeleton-travel var(--dur-moment) var(--ease-in-out) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+
+    &::after {
+      display: none;
+    }
+  }
 }
 
 /* §3.1's budget meter: "--meter-projected at 35% [opacity], 45° hatch, the projected_usd beyond
@@ -109,6 +142,394 @@
    the diagonal repeat — never a literal colour of its own. */
 @utility meter-hatch {
   background-image: repeating-linear-gradient(45deg, var(--meter-projected) 0 4px, transparent 4px 8px);
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * M9h "Aurora" (docs/design-plan.md §12). Material and effect utilities. Rules every one of them
+ * obeys: colours come from tokens (this file may hold no raw colour), shadows come from the
+ * --shadow tokens, durations and easings from the --dur and --ease tokens, and every INFINITE
+ * animation carries its own prefers-reduced-motion override, so a loop cannot be added without its
+ * off switch in view.
+ * ------------------------------------------------------------------------------------------- */
+
+/* The ambient layer behind the frame (components/ui/AmbientBackground.tsx). `will-change` is set on
+   the one element that actually animates, and only `transform` ever animates. */
+@keyframes aurora-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-2%, 1.5%, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(1.5%, -2%, 0) scale(1.02);
+  }
+}
+
+@utility aurora {
+  background-image: var(--aurora);
+  will-change: transform;
+}
+
+@utility aurora-drift {
+  animation: aurora-drift var(--dur-ambient) var(--ease-in-out) infinite alternate;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility grain {
+  background-image: var(--grain);
+  background-size: 160px 160px;
+  opacity: 0.05;
+}
+
+/* A row wash (§3.1): a feed or roster row tinted in the hue its host names via --wash-hue (see
+   lib/wash.ts). The STRENGTH is --wash-row, a per-theme token, not a fixed alpha class: 8% of a dark
+   hue is a quiet tint on navy but a dirty beige-and-khaki stripe on near-white paper, so light
+   restates it lower. A typo in a hue token would silently produce a transparent wash, which is why
+   lib/wash.test.ts checks every hue it names exists. */
+@utility wash {
+  background-color: color-mix(in oklab, var(--wash-hue) var(--wash-row), transparent);
+}
+
+/* A 1px gradient hairline ring, drawn by masking a gradient to the border box minus the content
+   box. The mask uses the `black` keyword: it is an ALPHA mask that is never painted, so it is not a
+   palette colour. Unprefixed `mask-composite: exclude` plus the WebKit spelling for older Safari. */
+@utility gradient-border {
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--gradient-border);
+    -webkit-mask:
+      linear-gradient(black 0 0) content-box,
+      linear-gradient(black 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(black 0 0) content-box,
+      linear-gradient(black 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+/* A radial highlight that follows the pointer (lib/useSpotlight.ts writes --mx/--my). The gradient
+   is built HERE, not in a token: a custom property holding var(--mx) substitutes where it is
+   declared, so it would freeze at the fallback. Pointer-fine devices only. */
+@utility spotlight {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(
+      260px circle at var(--mx, 50%) var(--my, 0%),
+      var(--spotlight-color),
+      transparent 65%
+    );
+    transition: opacity var(--dur-quick) var(--ease-out);
+  }
+
+  @media (hover: hover) {
+    &:hover::after {
+      opacity: 1;
+    }
+  }
+}
+
+/* Gradient text is for LARGE display numerals only (hero metrics): every brand stop clears 3:1 on
+   all five grounds, which is the large-text floor, not the body-text one. Forced-colors mode gets
+   the system text colour instead of an invisible fill. */
+@utility gradient-text {
+  background-image: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+
+  @media (forced-colors: active) {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+}
+
+/* The red-team category word (§8): the same gradient-clipped text as `gradient-text`, in the danger
+   gradient. Large display text only, like its brand sibling. */
+@utility danger-text {
+  background-image: var(--gradient-danger);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+
+  @media (forced-colors: active) {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+}
+
+@utility brand-fill {
+  background-image: var(--gradient-brand);
+}
+
+/* The top bar's underline: a horizontal brand hairline that fades to nothing at both ends. While a
+   run is streaming it also carries `meter-sheen`, so a highlight travels along it. */
+@utility hairline-brand {
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--brand-1) 20%,
+    var(--brand-2) 50%,
+    var(--brand-3) 80%,
+    transparent
+  );
+}
+
+@utility brand-fill-deep {
+  background-image: var(--gradient-brand-deep);
+}
+
+/* The primary button's hover sweep: one pass of a diagonal highlight. The fill itself never
+   lightens (§3.1: --accent sits in a narrow contrast window), so the sheen is what says "hover". */
+@keyframes sheen-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@utility sheen {
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--sheen);
+    transform: translateX(-120%);
+    pointer-events: none;
+  }
+
+  @media (hover: hover) {
+    &:hover:not(:disabled)::after {
+      animation: sheen-sweep var(--dur-sheen) var(--ease-out) 1 forwards;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      display: none;
+    }
+  }
+}
+
+/* The budget fill's moving highlight, applied only while spend is actually changing. */
+@keyframes meter-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+/* The HOST must be positioned and clipped (`relative overflow-hidden`, or `absolute` + `overflow-hidden`):
+   this utility deliberately sets neither, so it cannot fight a host that is already `absolute`. */
+@utility meter-sheen {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: var(--sheen);
+    animation: meter-sheen var(--dur-sheen) var(--ease-in-out) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      display: none;
+    }
+  }
+}
+
+/* The live/running dot's ring: scales and fades, 2s loop. Always sits beside a text label. */
+@keyframes ping-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@utility ping-ring {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-color: currentColor;
+    animation: ping-ring 2s var(--ease-out) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      display: none;
+    }
+  }
+}
+
+/* The phase stepper's active arc. A spinner that stops under reduced motion is still a legible
+   "in progress" mark: it is a partial ring beside the word "active". */
+@keyframes spin-arc {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@utility spin-arc {
+  animation: spin-arc var(--dur-moment) linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* The gate's armed Approve border: a conic gradient ring that rotates slowly. `@property` makes
+   the angle animatable; browsers without it show the ring static, which is still the "armed" cue. */
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes conic-spin {
+  to {
+    --angle: 360deg;
+  }
+}
+
+@utility conic-border {
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--angle),
+      var(--brand-1),
+      var(--brand-2),
+      var(--brand-3),
+      var(--brand-1)
+    );
+    -webkit-mask:
+      linear-gradient(black 0 0) content-box,
+      linear-gradient(black 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(black 0 0) content-box,
+      linear-gradient(black 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    animation: conic-spin calc(var(--dur-moment) * 4) linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::before {
+      animation: none;
+    }
+  }
+}
+
+/* Inputs: a tokenized field with a glow on focus. The 2px --line-focus ring (§10) is NOT replaced —
+   :focus-visible in the base layer still draws it; this adds the glow beside it. 44px tall on touch,
+   32px at the frame breakpoint, matching Button. */
+@utility field {
+  min-height: 2.75rem;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line-control);
+  background-color: var(--surface-inset);
+  padding-inline: var(--space-3);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  transition:
+    border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+
+  &:hover {
+    border-color: var(--accent-hover);
+  }
+
+  &:focus-visible {
+    box-shadow: var(--shadow-glow-brand);
+  }
+
+  @media (min-width: 1100px) {
+    min-height: 2rem;
+  }
+}
+
+/* The replay scrubber: a brand-filled track and a glowing thumb. --fill (a percentage) is set inline
+   by the component from the playback fraction; both engine spellings of the thumb are required. */
+@utility range-brand {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 0.375rem;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--accent) var(--fill, 0%),
+    var(--meter-track) var(--fill, 0%)
+  );
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 0.875rem;
+    height: 0.875rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background-color: var(--text-primary);
+    box-shadow: var(--shadow-glow-brand);
+  }
+
+  &::-moz-range-thumb {
+    width: 0.875rem;
+    height: 0.875rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background-color: var(--text-primary);
+    box-shadow: var(--shadow-glow-brand);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 }
 
 /* §4/§6: the report view and model card's prose (report/Markdown.tsx renders bare markdown tags,

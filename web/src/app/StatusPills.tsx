@@ -1,64 +1,69 @@
+import { Check, Hourglass, TriangleAlert, type LucideIcon } from "lucide-react";
+
 import type { RunStatusKind } from "../api/types";
-import { cn } from "../lib/cn";
+import { Chip, type ChipTone } from "../components/ui/Chip";
 import type { ConnectionState } from "../run/RunSource";
 
-/** Colour is never the only carrier of state (WCAG 1.4.1): every pill pairs its dot with a text
- * label. Run status and stream health are separate pills because they answer different questions —
- * "what is the run doing" and "can I trust that I am seeing it live". */
+/** Colour is never the only carrier of state (WCAG 1.4.1): every pill is a `Chip`, which pairs its
+ * tone-coloured mark with a text label. Run status and stream health are separate pills because they
+ * answer different questions — "what is the run doing" and "can I trust that I am seeing it live". */
 
-const RUN_STATUS: Record<RunStatusKind, { label: string; tone: string }> = {
-  running: { label: "running", tone: "text-status-info" },
-  awaiting_approval: { label: "awaiting approval", tone: "text-status-warn" },
-  completed: { label: "completed", tone: "text-status-ok" },
-  failed: { label: "failed", tone: "text-status-danger" },
+const RUN_STATUS: Record<RunStatusKind, { label: string; tone: ChipTone; icon?: LucideIcon; live?: boolean }> = {
+  // The ping ring is reserved (§7) for "this is happening right now": running, and a live stream.
+  running: { label: "running", tone: "info", live: true },
+  awaiting_approval: { label: "awaiting approval", tone: "warn", icon: Hourglass },
+  completed: { label: "completed", tone: "ok", icon: Check },
+  failed: { label: "failed", tone: "danger", icon: TriangleAlert },
 };
 
-/** `glow`: §7 M9g's one narrow, static (never pulsing) glow — reserved for "you are watching this
- * happen right now", the single state the stream-health pill exists to answer. `var(--status-ok)`
- * inside the arbitrary value is a token reference, not a literal colour, so it clears
- * no-raw-colour. */
-function Pill({ tone, label, hint, glow = false }: { tone: string; label: string; hint: string; glow?: boolean }) {
+export function RunStatusPill({ status }: { status: RunStatusKind | null }) {
+  if (status === null) {
+    return (
+      <Chip tone="idle" title="run status">
+        not started
+      </Chip>
+    );
+  }
+  const { label, tone, icon, live } = RUN_STATUS[status];
   return (
-    <span className="inline-flex items-center gap-2 text-sm text-fg-secondary" title={hint}>
-      <span aria-hidden="true" className={cn(tone, "text-xs", glow && "drop-shadow-[0_0_6px_var(--status-ok)]")}>
-        ●
-      </span>
-      <span>{label}</span>
-    </span>
+    <Chip tone={tone} title="run status" {...(icon === undefined ? {} : { icon })} live={live === true}>
+      {label}
+    </Chip>
   );
 }
 
-export function RunStatusPill({ status }: { status: RunStatusKind | null }) {
-  if (status === null) return <Pill tone="text-status-idle" label="not started" hint="run status" />;
-  const { label, tone } = RUN_STATUS[status];
-  return <Pill tone={tone} label={label} hint="run status" />;
+export interface StreamHealth {
+  label: string;
+  tone: ChipTone;
+  /** True only for a live stream that is open: the one state the pill's glow and ping ring exist for. */
+  live: boolean;
 }
 
-export function streamHealth(
-  connection: ConnectionState,
-  mode: "live" | "replay",
-): { label: string; tone: string } {
+export function streamHealth(connection: ConnectionState, mode: "live" | "replay"): StreamHealth {
   if (mode === "replay") {
     return connection === "closed"
-      ? { label: "replay ended", tone: "text-status-idle" }
-      : { label: "replay", tone: "text-status-info" };
+      ? { label: "replay ended", tone: "idle", live: false }
+      : { label: "replay", tone: "info", live: false };
   }
   switch (connection) {
     case "open":
-      return { label: "live", tone: "text-status-ok" };
+      return { label: "live", tone: "ok", live: true };
     case "connecting":
-      return { label: "connecting", tone: "text-status-info" };
+      return { label: "connecting", tone: "info", live: false };
     case "reconnecting":
-      return { label: "reconnecting", tone: "text-status-warn" };
+      return { label: "reconnecting", tone: "warn", live: false };
     case "error":
-      return { label: "disconnected", tone: "text-status-danger" };
+      return { label: "disconnected", tone: "danger", live: false };
     case "closed":
-      return { label: "stream ended", tone: "text-status-idle" };
+      return { label: "stream ended", tone: "idle", live: false };
     case "idle":
-      return { label: "idle", tone: "text-status-idle" };
+      return { label: "idle", tone: "idle", live: false };
   }
 }
 
+/** §7 (revised M9h): the live pill carries the one resting glow in the product plus a slow ping ring,
+ * reserved for "you are watching this happen right now" — the single state this pill exists to
+ * answer. `shadow-glow-ok` is a token, so it clears the shadows-are-tokenized rule. */
 export function StreamHealthPill({
   connection,
   mode,
@@ -66,6 +71,10 @@ export function StreamHealthPill({
   connection: ConnectionState;
   mode: "live" | "replay";
 }) {
-  const { label, tone } = streamHealth(connection, mode);
-  return <Pill tone={tone} label={label} hint="stream health" glow={mode === "live" && connection === "open"} />;
+  const { label, tone, live } = streamHealth(connection, mode);
+  return (
+    <Chip tone={tone} title="stream health" live={live} {...(live ? { className: "shadow-glow-ok" } : {})}>
+      {label}
+    </Chip>
+  );
 }

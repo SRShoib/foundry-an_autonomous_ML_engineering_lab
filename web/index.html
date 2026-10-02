@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>foundry operator console</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Browser chrome follows the system scheme; these are the two grounds (docs/design-plan.md §3).
+         The in-app theme toggle cannot update a static tag, so this tracks the system, not the toggle. -->
+    <meta name="theme-color" content="#0a0c1c" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#eceffb" media="(prefers-color-scheme: light)" />
     <!-- Sets data-theme before first paint so a stored light preference never flashes dark. Dark is
          the default (docs/design-plan.md §3); prefers-color-scheme is honoured only when nothing is
          stored. Mirrored by src/app/theme.ts — keep the storage key in sync. -->

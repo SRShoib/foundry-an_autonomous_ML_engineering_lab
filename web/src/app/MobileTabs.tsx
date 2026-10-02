@@ -20,11 +20,11 @@ export function MobileTabs<T extends string>({ tabs, active, onChange, label }: 
       active={active}
       onChange={onChange}
       label={label}
-      className="flex border-b border-line-hairline bg-surface-deck frame:hidden"
+      className="flex border-b border-line-hairline bg-surface-deck/70 frame:hidden"
       tabClassName={(selected) =>
         cn(
           "min-h-11 flex-1 px-3 text-sm transition-colors duration-(--dur-quick) ease-out",
-          selected ? "font-medium text-fg" : "text-fg-secondary hover:text-fg",
+          selected ? "font-semibold text-fg" : "text-fg-secondary hover:text-fg",
         )
       }
       indicator

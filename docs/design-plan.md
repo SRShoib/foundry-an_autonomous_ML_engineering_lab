@@ -4,6 +4,11 @@ Status: approved design, no code. This is the contract for M9b–M9f. CLAUDE.md 
 frontend to follow it exactly; a change to anything here means re-entering Plan Mode, not
 improvising in code.
 
+**Revised twice since.** M9g added one accent, a shadow ladder and interaction motion. **M9h
+(§12) is the "Aurora" overhaul and supersedes the palette, typeface, shape, shadow and
+restraint rules below wherever they disagree.** Passages it changes are marked "(revised M9h)";
+§12 lists every rule it overrides and every rule that stays.
+
 The plan is built against the API as it exists in `app/`, not an imagined one. Where the API
 falls short of what SPEC's screens need, that is stated in [Backend additions](#backend-additions-m9b-lands-first)
 rather than designed around.
@@ -59,6 +64,14 @@ a SaaS dashboard, where everything scrolls together and nothing has a home.
 Boldness is spent once, on the red-team invalidation (§8). Everything else is quiet
 instrumentation.
 
+*(revised M9h)* The frame rule stands: states live at fixed positions and only the event log
+scrolls. The "quiet instrumentation" half does not. M9a–M9g built it, and checked against real
+screenshots it read as unfinished, not disciplined. Instruments are now luminous: layered glass
+material, vivid team and status colour, real iconography and live-state glow. The red-team
+invalidation is still the single loudest moment in the product, the only one with a screen-edge
+vignette and a 1400ms sequence; it is no longer the only moment that is allowed to look
+designed.
+
 ---
 
 ## 3. Color tokens
@@ -69,146 +82,166 @@ Two complete themes, not an inversion. Dark is primary. All values are CSS custo
 Contrast figures below are the **worst case across all five surfaces** of that theme (see §11 for
 method and the full check).
 
-### 3.1 Dark — "instrument slate"
+### 3.1 Dark — "ink" (revised M9h; was "instrument slate")
 
-Five ground layers, hue ~215. Elevation in the docked layer comes from a surface-hue shift plus a
-1px border, never a shadow.
+Five ground layers, hue ~235 (indigo-ink, up from slate's ~215, with visibly more chroma).
+Elevation comes from a surface-hue shift, a gradient hairline and a tinted layered shadow (§3.3).
+The page carries an ambient aurora (§12.3); the five opaque grounds below remain what every text
+token is measured against.
 
 | Token | Hex | Use |
 |---|---|---|
-| `--surface-abyss` | `#0D1117` | page behind the frame |
-| `--surface-deck` | `#141A22` | main panel ground |
-| `--surface-panel` | `#1A212B` | docked panels |
-| `--surface-raised` | `#222B36` | drawers, dialogs, hover, the red-team alert |
-| `--surface-inset` | `#0F151C` | wells: code, stdout, meter track |
-| `--line-hairline` | `#232C38` | dividers inside a panel (decorative) |
-| `--line-strong` | `#33404F` | panel edges (decorative) |
-| `--line-control` | `#62798F` | input and button boundaries, 3.2:1 |
-| `--line-focus` | `#6494F0` | focus ring, 2px at 2px offset, 4.8:1 |
-| `--text-primary` | `#E6EDF5` | 12.1:1 (14.8:1 on deck) |
-| `--text-secondary` | `#9FB0C3` | 6.5:1 (7.9:1 on deck) |
-| `--text-muted` | `#8396AB` | 4.7:1 (5.8:1 on deck) — the text floor |
+| `--surface-abyss` | `#0A0C1C` | page behind the frame; the aurora's ground |
+| `--surface-deck` | `#0F1228` | main column ground (70% over the aurora on the live view) |
+| `--surface-panel` | `#151A33` | docked panels |
+| `--surface-raised` | `#1D2340` | drawers, dialogs, hover, the red-team alert |
+| `--surface-inset` | `#0B0E20` | wells: code, stdout, meter track |
+| `--line-hairline` | `#232A4A` | dividers inside a panel (decorative) |
+| `--line-strong` | `#323A63` | panel edges (decorative) |
+| `--line-control` | `#6D79AD` | input and button boundaries, 3.65:1 |
+| `--line-focus` | `#8AA4FF` | focus ring, 2px at 2px offset, 6.46:1 |
+| `--text-primary` | `#EEF1FF` | 13.65:1 (16.41:1 on deck) |
+| `--text-secondary` | `#AAB4DC` | 7.52:1 (9.03:1 on deck) |
+| `--text-muted` | `#8D98C4` | 5.43:1 (6.52:1 on deck) — the text floor |
 
-**Team hues.** Each agent team owns one desaturated hue. This is functional encoding — it answers
-"who acted" at a glance in a dense feed. Used only as a 3px left rail and a small glyph. Never as
-a fill. Never in a table.
+**Team hues** *(revised M9h)*. Each agent team owns one vivid hue. This is functional encoding — it
+answers "who acted" at a glance in a dense feed. It appears as an icon chip (15% tint), a feed and
+roster row wash (`--wash-row`: 8% in dark, 5% in light), and the team label. Never in the leaderboard
+or any table. Every wash alpha is composited against text on the grounds a row sits on and tested (§11).
 
 | Token | Hex | Team | Min contrast |
 |---|---|---|---|
-| `--team-principal` | `#C9B27A` | principal | 6.9:1 |
-| `--team-data` | `#5FA8C7` | data_team | 5.4:1 |
-| `--team-modeling` | `#8C9EE0` | modeling_team | 5.5:1 |
-| `--team-runner` | `#6FB39A` | experiment_runner | 5.9:1 |
-| `--team-redteam` | `#E5726D` | red_team | 4.7:1 |
-| `--team-reporter` | `#B08CC7` | reporter | 5.1:1 |
+| `--team-principal` | `#F5C76E` | principal | 9.71:1 |
+| `--team-data` | `#4DC4F0` | data_team | 7.66:1 |
+| `--team-modeling` | `#9AA6FF` | modeling_team | 6.78:1 |
+| `--team-runner` | `#4FDBA5` | experiment_runner | 8.79:1 |
+| `--team-redteam` | `#FF6F86` | red_team | 5.76:1 |
+| `--team-reporter` | `#D98CFF` | reporter | 6.69:1 |
 
-Every team row also carries a text label and a distinct glyph, so hue is redundant encoding (WCAG
-1.4.1). This matters most for `--team-runner` against `--team-redteam`, the red/green pair.
+Every team row also carries a text label and a distinct icon, so hue is redundant encoding (WCAG
+1.4.1). This matters most for `--team-runner` against `--team-redteam`, the green/red pair: a flask
+and a shield-alert cannot be mistaken for each other in greyscale.
 
 **Status ramp**, deliberately separate from team hues because "who" and "what state" are different
 questions:
 
 | Token | Hex | Min contrast |
 |---|---|---|
-| `--status-ok` | `#4FB286` | 5.5:1 |
-| `--status-warn` | `#D9A44C` | 6.4:1 |
-| `--status-danger` | `#E5726D` | 4.7:1 |
-| `--status-info` | `#6494F0` | 4.8:1 |
-| `--status-idle` | `#66798D` | 3.2:1, graphic use only |
+| `--status-ok` | `#3DDC97` | 8.69:1 |
+| `--status-warn` | `#FFB84D` | 8.94:1 |
+| `--status-danger` | `#FF6F86` | 5.76:1 |
+| `--status-info` | `#62ADFF` | 6.54:1 |
+| `--status-idle` | `#6F7AA6` | 3.67:1, graphic use only |
 
 `--status-danger` is intentionally the same value as `--team-redteam`: invalidation *is* the
 danger state. `--status-idle` is for dots and glyphs and always paired with a text label in
 `--text-muted`; it is not a text color.
 
-**Accent.** M9g. One deliberate accent, `--accent`, for primary actions and focus emphasis only —
-"Start run", "Approve", the active tab indicator, the range-input thumb. It is a saturated
-indigo-violet, chosen to sit at a different hue from `--status-info`'s cooler sky-blue so a primary
-action never reads as an informational state. It is never used for team identity or status, and no
-second accent is introduced beside it — six team hues plus one status ramp plus one accent is the
-full palette.
+**Brand and accent** *(revised M9h; M9g's single accent is now the deep end of a gradient)*. The
+identity is one three-stop gradient, violet → blue → cyan, used for the logo, progress and emphasis
+fills, borders, glows, and large display numerals. The solid `--accent` / `--accent-to` pair is the
+**deep** gradient primary buttons use, because it is the only part dark enough to carry white text
+at 4.5:1. The bright cyan end is never behind body text, and gradient text is large text only.
 
 | Token | Hex | Use | Min contrast |
 |---|---|---|---|
-| `--accent` | `#6A63F0` | primary buttons, active tab rail, focus emphasis | 3.17:1 (graphic floor) |
-| `--accent-hover` | `#7C74F5` | hover/press state of the above | — (visual only) |
-| `--accent-soft` | `rgb(106 99 240 / 0.14)` | translucent wash behind an active/selected row | exempt, decorative |
-| `--accent-contrast` | `#FFFFFF` | label/icon color sitting on a filled `--accent` surface | 4.51:1 against `--accent` |
+| `--brand-1` | `#8B6DFF` | gradient start (violet) | 4.19:1 (graphic) |
+| `--brand-2` | `#5B8CFF` | gradient middle (blue) | 4.86:1 (graphic) |
+| `--brand-3` | `#22D3EE` | gradient end (cyan) | 8.50:1 (graphic) |
+| `--accent` | `#6C5CFF` | deep-gradient start, active tab rail, range thumb | 3.37:1 (graphic floor) |
+| `--accent-to` | `#3A64F5` | deep-gradient end | 3.16:1 (graphic); 4.86:1 for white on it |
+| `--accent-hover` | `#8274FF` | hover/press border and glow state | 4.31:1 (graphic) |
+| `--accent-soft` | `rgb(108 92 255 / 0.16)` | translucent wash behind an active/selected row | exempt, decorative |
+| `--accent-contrast` | `#FFFFFF` | label/icon sitting on a filled `--accent` surface | 4.55:1 against `--accent` |
 
-`--accent` is classified as a graphic token (WCAG 1.4.11, 3:1), the same floor as `--line-control`:
-it is a boundary/fill, never body text. `--accent-contrast` is verified against `--accent` itself,
-not the five grounds — see §11.
+`--accent` is the window between two floors: light enough to hold 3:1 against the darkest-contrast
+ground (`--surface-raised`) and dark enough to hold 4.5:1 under white text. That window is narrow
+(luminance 0.155 to 0.183), which is why a primary button never *lightens* its fill on hover — it
+gains a glow and a sheen instead. `--accent-to` and `--accent-contrast` are verified against each
+other, not the five grounds (§11).
 
-**Budget meter.** A continuous quantity gets its own ramp:
+**Budget meter.** A continuous quantity gets its own ramp. *(revised M9h)* Each tone is now a
+gradient from its status colour to a hotter end colour, so the bar reads as filling with energy:
 
 | Token | Value | Threshold |
 |---|---|---|
-| `--meter-track` | `#232C38` | — |
-| `--meter-safe` | `#4FB286` | under 70% of cap |
-| `--meter-pressure` | `#D9A44C` | 70–90% |
-| `--meter-critical` | `#E5726D` | over 90% |
-| `--meter-projected` | `#D9A44C` at 35% | 45° hatch, the `projected_usd` beyond spend |
+| `--meter-track` | `#232A4A` | — |
+| `--meter-safe` | `#3DDC97` → `--brand-3` | under 70% of cap |
+| `--meter-pressure` | `#FFB84D` → `--meter-pressure-end` `#FF8A4C` | 70–90% |
+| `--meter-critical` | `#FF6F86` → `--meter-critical-end` `#FF3D6E` | over 90% |
+| `--meter-projected` | `#FFB84D` at 35% | 45° hatch, the `projected_usd` beyond spend |
 
 The meter is never the only carrier of its value: a numeric readout always sits beside it.
 
-### 3.2 Light — "datasheet"
+### 3.2 Light — "porcelain" (revised M9h; was "datasheet")
 
-Cool neutral paper. Not an inversion of dark, and explicitly not cream.
+Cool lavender-tinted paper with a pastel aurora. Not an inversion of dark, and explicitly not cream.
 
 | Token | Hex |
 |---|---|
-| `--surface-abyss` | `#EEF1F5` |
-| `--surface-deck` | `#F7F9FB` |
+| `--surface-abyss` | `#ECEFFB` |
+| `--surface-deck` | `#F5F6FD` |
 | `--surface-panel` | `#FFFFFF` |
 | `--surface-raised` | `#FFFFFF` (bordered with `--line-strong`) |
-| `--surface-inset` | `#EDF1F5` |
-| `--line-hairline` | `#DCE3EB` |
-| `--line-strong` | `#C2CDD9` |
-| `--line-control` | `#718AA6` |
-| `--line-focus` | `#2A5FC7` |
-| `--text-primary` | `#131A22` |
-| `--text-secondary` | `#45566A` |
-| `--text-muted` | `#5A6D83` |
+| `--surface-inset` | `#E8EBF8` |
+| `--line-hairline` | `#DFE3F3` |
+| `--line-strong` | `#C6CCE6` |
+| `--line-control` | `#6A76AD` |
+| `--line-focus` | `#3F5BD6` |
+| `--text-primary` | `#12142B` |
+| `--text-secondary` | `#444B78` |
+| `--text-muted` | `#575F8C` |
 
-Team hues, same hue angle, lower lightness to hold contrast on paper: principal `#82662A`, data
-`#1F6F91`, modeling `#4A5CB0`, runner `#2A775E`, red team `#C0342E`, reporter `#7A4F94`.
+Team hues, same hue angle, lower lightness to hold contrast on paper: principal `#7D5A0D`, data
+`#0A6A8F`, modeling `#4652C4`, runner `#0B6A4D`, red team `#B4253F`, reporter `#8339BD`. Principal,
+runner and red team are a shade darker than their first draft: a feed label sits on an 8% wash of
+its own hue, which costs about 0.5:1, and the first values fell to 4.50 / 4.38 / 4.29 there (§11).
 
-Status: ok `#1F7A55`, warn `#8E620E`, danger `#C0342E`, info `#2A5FC7`, idle `#6B7D91`.
+Status: ok `#0B6D49`, warn `#8A5805`, danger `#B4253F`, info `#2358D4`, idle `#6A7399`. Status ok
+joins the darkened set for the same reason: the feed's "done" row labels itself in this green on an 8%
+wash of the same green, and the first value (`#0E7550`) fell to 4.46:1 on the page ground.
 
-### 3.3 Shape and elevation
+Brand: `--brand-1` `#6F4DF0`, `--brand-2` `#3B6BE8`, `--brand-3` `#0A8FB0`; accent `#5440E6`,
+`--accent-to` `#2F56E0`, `--accent-hover` `#4A38D4`, `--accent-contrast` `#FFFFFF`. Meter ends:
+pressure `#B3470B`, critical `#DC2450` (critical itself is `#B4253F`).
 
-Radius encodes **permanence**.
+### 3.3 Shape and elevation (revised M9h)
 
-| Token | Value | Applies to |
-|---|---|---|
-| `--radius-panel` | `3px` | docked panels — rack-mounted, nearly square |
-| `--radius-control` | `4px` | buttons, inputs |
-| `--radius-float` | `10px` | drawers, gate dialogs, the red-team alert |
-| `--radius-pill` | `999px` | replay speed selector, status dots only |
-
-**Shadow is an interaction signal, not a resting property of a docked panel (revised, M9g).** A
-docked panel still carries no shadow while idle — that rule is unchanged. What changes: shadows are
-now a small tokenized ladder rather than a single value, all tinted rather than neutral grey, and
-components reference the tokens exclusively (`design-invariants.test.ts`'s `shadows-are-tokenized`
-rule fails any literal `box-shadow` that isn't `var(--shadow-*)`).
+Radius encodes **role** (it used to encode permanence at 3/4/10px, which read as wireframe boxes).
 
 | Token | Value | Applies to |
 |---|---|---|
-| `--shadow-highlight` | `inset 0 1px 0 rgb(255 255 255 / 0.05)` | a barely-there top edge on interactive panels — material, not elevation |
-| `--shadow-hover` | `0 6px 20px -8px rgb(6 10 16 / 0.6)` | the lift a docked row/panel gains on hover only |
-| `--shadow-raised` | `0 10px 28px -10px rgb(6 10 16 / 0.68)` | active/pressed or persistently-elevated controls (the primary button) |
-| `--shadow-float` | `0 1px 2px rgb(6 10 16 / 0.4), 0 16px 40px -12px rgb(6 10 16 / 0.72)` | drawers, gate dialogs, the red-team alert — now a contact shadow plus the original cast shadow |
+| `--radius-panel` | `14px` | docked panels, KPI tiles, code wells |
+| `--radius-control` | `10px` | buttons, inputs, selects |
+| `--radius-chip` | `8px` | icon chips, rank chips, kbd hints |
+| `--radius-float` | `20px` | drawers, gate dialogs, the red-team alert |
+| `--radius-pill` | `999px` | replay speed selector, status chips, live dots |
 
-A docked panel at rest still has zero elevation. `--shadow-hover`/`--shadow-raised` only ever
-appear behind a `hover:`/`active:`/`data-[state=open]:` modifier — never unconditionally on a
-docked element — which is what keeps "elevation is earned by the pointer" distinct from "everything
-floats," the exact trope §3.3's original self-critique (below) rejected.
+**Shadow** *(revised M9h; M9g's "no resting shadow on a docked panel" is withdrawn)*. A docked
+panel now carries a tinted, layered `--shadow-panel` at rest. What keeps this from becoming "the
+same soft grey shadow everywhere" is that it is not uniform: the rail is unboxed, the feed is a
+timeline rather than cards, tables are unboxed rows, panels are tinted indigo not grey, floats are
+a different tier, and *glow* is reserved for semantic state. Components reference tokens
+exclusively (`design-invariants.test.ts`'s `shadows-are-tokenized` rule fails any literal
+`box-shadow` that isn't `var(--shadow-*)`).
 
-**Glass, for the float layer only.** `--surface-glass` / `--surface-glass-border` give drawers and
-gate dialogs translucency plus a `backdrop-blur` instead of a flat `--surface-raised` fill. Alpha
-stays at 0.84+ so text inside still reads at the contrast already verified for `--surface-raised` —
-this is a material texture behind an opaque-enough panel, not a transparency effect that risks
-legibility. Never used in the docked layer, where a panel must stay legible with nothing rendered
-behind it.
+| Token | Role |
+|---|---|
+| `--shadow-highlight` | a barely-there inset top edge: material, not elevation |
+| `--shadow-panel` | resting docked panel: top sheen plus a soft indigo-tinted cast |
+| `--shadow-hover` | what a row/panel gains on hover: deeper cast plus a 1px brand ring |
+| `--shadow-raised` | the primary button at rest, pressed or persistently-elevated controls |
+| `--shadow-float` | drawers, gate dialogs, the red-team alert: contact shadow, long cast, brand ring |
+| `--shadow-glow-{brand,ok,warn,danger}` | **semantic glow**: primary-button hover, live, running, critical meter, red-team. Always beside a text label |
+| `--shadow-vignette-danger` | the screen-edge vignette of the red-team moment (§8). The only one in the app |
+
+Light theme redefines all of them as low-alpha indigo (a dark cast on paper reads as dirt).
+
+**Glass, for the float layer and the top bar.** `--surface-glass` / `--surface-glass-border` give
+drawers, gate dialogs and the top bar translucency plus a `backdrop-blur`. Alpha stays at 0.84+ so
+text inside still reads at the contrast verified for `--surface-raised`. Docked panels are *not*
+glass: they are opaque `--surface-panel` with a gradient hairline, so a panel stays legible with
+nothing rendered behind it. At most two `backdrop-filter` layers are live at once.
 
 Spacing is a 4px grid: `4 8 12 16 24 32 48 64`.
 
@@ -218,9 +251,12 @@ Spacing is a 4px grid: `4 8 12 16 24 32 48 64`.
 
 | Role | Family | Weights | Why |
 |---|---|---|---|
-| Interface | **IBM Plex Sans** | 400, 500, 600 | drawn for technical interfaces; shares metrics with Plex Mono |
-| Measured values | **IBM Plex Mono** | 400, 500 | every number: cost, metric, duration, `seq`, timestamp, `experiment_id` |
+| Interface | **Geist** (variable) | 400, 500, 600 | *(revised M9h; was IBM Plex Sans)* crisp at 12–13px, tabular figures, designed as a pair with its mono |
+| Measured values | **Geist Mono** (variable) | 400, 500 | *(revised M9h; was IBM Plex Mono)* every number: cost, metric, duration, `seq`, timestamp, `experiment_id` |
 | Produced document | **Newsreader** | 400, 500 | report view and model card only |
+
+Headings and hero numerals use `--tracking-tight` (`-0.02em`). The no-positive-tracking rule is
+unchanged: only tightening is allowed.
 
 **All numerics use `font-variant-numeric: tabular-nums`.** Non-negotiable: animated counters in
 proportional figures jitter horizontally as digits change.
@@ -437,7 +473,30 @@ as the data-driven table does.
 | Tab indicator (mobile tabs, drawer tabs) | The selected-tab underline is a `layoutId`-shared element that slides between tabs, `--dur-base`/`--ease-in-out` — the same shared-layout technique §7's gate-confirm "fly" already uses, not new machinery. |
 | Replay speed pill | Selected-state pill slides via the same shared-layout technique, `--dur-quick`. |
 | Skeleton | Reverses §9's "shimmer-free": a slow sweep, `--dur-moment`, opacity-modulated only (no shimmer-as-decoration on a dozen static blocks at once — see §9). |
-| "Live" stream-health dot | The one narrow, static (never pulsing) glow outside §8: reserved for "you are watching this happen right now" — the single state that pill exists to answer. Every other status dot stays flat. |
+| "Live" stream-health dot | *(revised M9h)* A glow plus a slow ping ring, reserved for states that mean "this is happening right now": live, running. Always beside a text label. Idle, ended and failed dots stay flat. |
+
+### Material and ambient motion (M9h)
+
+M9g's table is still data-driven or pointer-driven. M9h adds the motion that makes the surface feel
+alive without being tied to either. Every row reuses an existing `--dur-*` / `--ease-*` token or one
+of the three added in §12.2, and every continuous loop is switched off under
+`prefers-reduced-motion` with an explicit `animation: none` (not merely a zero duration).
+
+| Moment | Spec |
+|---|---|
+| Aurora drift | The ambient layer translates and scales a few percent over `--dur-ambient` (40s), alternating. `transform` only, one compositor layer, no blur filter. |
+| Panel spotlight | A radial highlight follows the pointer inside a docked panel or table row, `--dur-quick` fade in/out. Pointer-fine devices only; written as CSS variables, never React state. |
+| Primary button sheen | A diagonal highlight sweeps once across the primary button on hover, `--dur-sheen`. The fill never lightens (§3.1 accent window). |
+| Conic Approve border | Once the gate's Approve control is armed (§6, 400ms), a conic gradient border rotates slowly around it. Static under reduced motion. |
+| Meter sheen | While spend is changing, a highlight travels along the budget fill. Idle, it stops. |
+| Feed arrival glow | The newest batch of rows carries a team-tinted wash that fades over 1.2s. Opacity only, so §7's batch, stagger and virtualization rules are untouched. |
+| Phase progress line | The connector between phase steps fills with the brand gradient as phases complete; the active step shows a spinning arc. |
+| Live ping | The live/running dot emits a ring that scales and fades, 2s loop. |
+| Skeleton | A slow travelling highlight across the block (`--dur-moment`); see §9. |
+| Route cascade (M9h-3) | One stagger across a page's top-level panels on route mount: opacity and 6px `y`, 40ms apart, once. Never re-fired by data updates. |
+
+Hover remains glow, spotlight and border only. A rule in `designRules.ts` (`no-hover-motion`) fails
+`hover:translate-*`, `hover:scale-*` and `animate-bounce`, so "hover bounce" cannot creep back in.
 
 ---
 
@@ -459,7 +518,22 @@ Spent anywhere else it is decoration.
 | 700–1400ms | **The finding.** The audit panel expands: category, the audit tool's actual measured evidence, and the recommendation. The category renders at `--text-display`, the only use of that size on this screen. |
 
 Throughout, a single 2px `--team-redteam` rule runs along the top of the right column and fades
-across the full 1400ms. Nothing pulses, nothing glows, nothing bounces.
+across the full 1400ms. Nothing pulses, nothing bounces. *(revised M9h)* The moment is now louder,
+because it is the one thing the whole product is built to show: a danger-tinted bloom (`--bloom-danger`)
+swells behind the audit panel, the connector gains a soft glow underlay, and a screen-edge vignette
+(`--shadow-vignette-danger`) fades across the same 1400ms. The vignette appears nowhere else in the
+app. The choreography's phases, timings and the data that drives them are unchanged.
+
+*The vignette's strength was measured, not assumed.* It is a full-viewport inset shadow, so its
+brightest pixel is the viewport edge, at a fraction of its nominal alpha: a Gaussian of sigma =
+blur / 2, with the edge sitting `spread` pixels inside the opaque region, gives
+`alpha x Phi(spread / sigma)`. The first draft (140px blur, 8px spread, 0.22) therefore painted only
+~11% at the edge, +27 on the red channel in a real browser, a rim you had to hunt for. It is now
+160px / 60px at 0.22 in dark (0.12 in light): ~17% at the edge, +39 measured, and still +21 at 80px
+in, with its opacity peaking at ~0.99 at 250ms and gone by 1.4s (also measured). It paints at z-20,
+under the top bar and every dialog, so it can sit over the page ground, the deck and a panel but never
+over a raised surface; `tokens.contrast.test.ts` holds text-primary, secondary and muted to 4.5:1 at
+that modelled peak over those three grounds.
 
 `aria-live="assertive"` announces it once. Everything else in the app is `polite` and throttled.
 
@@ -473,10 +547,9 @@ here is why.*
 Skeletons mirror the real grid: the three-column frame renders immediately with panel outlines and
 muted blocks, so nothing reflows on load. M9g reverses the original "shimmer-free" rule: a single
 skeleton block now carries a slow (`--dur-moment`) opacity sweep, because a lone static block reads
-as inert rather than loading. The original objection — "a moving highlight on a dozen blocks is
-decoration" — still holds for a *dense grid* of skeletons, so the sweep is deliberately slow and
-low-contrast rather than a bright shimmer, and stays legible rather than decorative even when
-several blocks are visible at once. Empty states name the next action ("No runs
+as inert rather than loading. *(revised M9h)* The sweep gains a soft travelling highlight on top of
+the opacity pulse. It stays slow and low-contrast, and is implemented inside the `skeleton-sweep`
+utility so no `animate-`, `shimmer` or `pulse` class name appears in markup. Empty states name the next action ("No runs
 yet. Pick a dataset above to start one."). Error states name the failure and the fix, using
 `RunStatus.error` verbatim rather than a generic message. Stream-disconnected shows the
 reconnecting bar with automatic retry and backoff, and the feed stays readable and scrollable
@@ -522,6 +595,40 @@ surface every other worst-case in this table lands on. `--accent-contrast` is ch
 filled `--accent` surface: 4.51:1, clearing the 4.5:1 text floor with real (if not generous)
 margin. Both were chosen by computing the ratio first, the same discipline as the rest of this
 table, not by eye.
+
+**M9h's palette** (§3, §12) was computed before it was written down, and the computation again
+caught a real failure. The first aurora and spotlight washes were 22% violet over every ground;
+composited, `--text-muted` on `--surface-raised` fell to **4.20:1** in dark and, at 14%, to
+**4.31:1** in light — both under the 4.5:1 floor. Fixes, each verified:
+
+| Layer | Sits on | Dark alpha | Light alpha | Worst case: 4.5:1 floor, measured |
+|---|---|---|---|---|
+| aurora violet / cyan / magenta | abyss, deck only | 0.20 / 0.13 / 0.08 | 0.12 / 0.08 / 0.05 | muted text 5.12 dark, 4.59 light |
+| bloom brand / danger | abyss, deck only | 0.20 / 0.16 | 0.10 / 0.08 | muted text 5.21 dark, 4.71 light |
+| spotlight | all five grounds | 0.12 | 0.08 | muted text 4.76 dark, 4.65 light |
+| row wash (`--wash-row`), team and status hues | abyss, deck, panel, raised | 0.08 | 0.05 | label, secondary and muted text 4.57 dark, 4.91 light |
+| chip tint | all five grounds | 0.15 | 0.15 | icon 3.44 dark, 3.63 light (graphic floor 3); text-primary label 9.64 dark, 12.01 light |
+| red-team vignette (inset shadow, §8) | abyss, deck, panel (paints under dialogs and the top bar) | 0.22 nominal, 0.170 at the edge | 0.12 nominal, 0.093 at the edge | muted text 4.70 dark, 4.63 light |
+
+The row wash is a per-theme token, not a fixed alpha, and that came from looking at the screenshots
+rather than the maths: 8% of a dark hue is a quiet tint on navy but, on near-white paper, turned the
+feed into dirty beige-and-khaki stripes, so light restates `--wash-row` at 5%.
+
+Two other first drafts failed the same computation and were corrected rather than waved through.
+Light principal, runner and red team (and later status ok) sat within half a point of the floor, and a
+feed label sits on a wash of its *own* hue, which costs about 0.5:1: `#85600F` / `#0F7656` / `#C42B48`
+fell to 4.50 / 4.38 / 4.29 and `#0E7550` to 4.46, so each is now a shade darker (§3.2). And a chip's
+*label* is `--text-primary`, never the tone colour, because tone text on its own tint fell to 3.7:1 on
+the light theme; only the chip's icon takes the tone, and an icon needs 3:1.
+
+A fully stacked worst case (all three aurora peaks at one pixel) does fail, so the guard is
+deliberately *per layer at its peak*, and the three glow centres are placed far apart (top-left,
+top-right, bottom-right), each falling to transparent by 70%, so no pixel sees more than one at
+anything near peak. `tokens.contrast.test.ts` composites every translucent layer in the aurora,
+spotlight and bloom tokens over each ground it can sit on and fails the build if any of
+`--text-primary/secondary/muted` drops under 4.5:1; a separate case does the same for the 8% team
+wash. The dark worst case still lands on `--surface-raised`, so the existing "every quoted worst
+case sits on raised" assertion holds, now with new figures.
 
 ---
 
@@ -600,3 +707,106 @@ Two critiques beyond SPEC's list:
    What stays cut, unchanged from critiques 1–7: no second accent, no box-shadow on a docked panel
    at rest, no shimmer across a dense grid of simultaneous skeletons (a single skeleton may now
    sweep; §9), no tracked caps, no weight above 600.
+
+9. **Restraint was the defect, and M9g under-corrected it (M9h).** Critique 8 fixed the *symptoms*
+   narrowly — one accent, a shadow ladder, hover states — and left the cause: a contract written to
+   avoid every AI-default trope also avoided colour, depth, iconography and atmosphere. The
+   console still read as cheap, and the screenshots say why: five near-identical slate greys with no
+   atmosphere; 3px-radius boxes with 1px grey borders; colour limited to 3px rails and 6px dots;
+   text-glyph "icons" (`· ✓ ◐ ● ⊘ ▼`); a plain-text wordmark; 12px muted panel titles; browser-default
+   select, range slider, links and scrollbars; and, on page screens, a lighter centre band that
+   looked like a rendering bug. M9h therefore lifts the restraint rules that produced those
+   (§12.1) rather than patching around them, and keeps the ones that guard against *actual*
+   generic-AI tells: no ALL-CAPS tracked eyebrows, no middle-dot meta strings, no `→` on buttons, no
+   numbered non-sequences, no cream/terracotta, no look-alike cards. The mechanical guards were kept
+   and extended, not relaxed: a new `no-hover-motion` rule, and a contrast composite test for every
+   translucent layer.
+
+---
+
+## 12. M9h revision — "Aurora"
+
+M9h is a visual overhaul that changes material, colour, type, iconography and motion. It does not
+touch layout geometry (§5), data flow, the run sources, the replay format, the choreography's logic
+and timings (§8), or the backend. Direction chosen with the operator: **Aurora** (indigo-ink ground,
+violet → blue → cyan identity gradient, vivid team and status colour, glass and gradient-hairline
+materials). Staged: **h1** foundation, shell and live run view; **h2** runs home, report, eval and
+states; **h3** motion polish and hardening (Lighthouse, reduced-motion audit, mobile and light passes).
+
+### 12.1 Rules overridden, and rules that stay
+
+| Rule before | Now |
+|---|---|
+| SPEC avoid-list "gradient washes used as decoration"; critique 3 | Allowed when tokenized and capped (§12.3): one brand gradient, one ambient aurora, state-coloured meter fills, gradient hairlines |
+| §2 and SPEC "boldness spent once" | Boldness goes into material, brand and live state; the red-team moment stays the single loudest (§8) |
+| SPEC "no fade-slide-up on every section, no hover bounce" | One route entrance plus one cascade per route mount; hover = glow, spotlight, border; never a lift or scale (`no-hover-motion`) |
+| §3.3 radius encodes permanence, 3/4/10px | Radius encodes role: 14 / 10 / 8 / 20 / pill |
+| §3.3 / M9g no resting shadow on docked panels | Tinted layered `--shadow-panel`; glow reserved for semantic state |
+| §3.1 team hue "never a fill" | 15% icon chips and a row wash (8% dark, 5% light); still never in the leaderboard or any table |
+| §3.1 one accent, no second | A three-stop brand gradient is the identity; solid `--accent` remains for label-on-fill |
+| §7 and §9 "no pulse, no glow", shimmer-free skeleton | Glow and a ping ring for live/running/critical, always beside a text label; skeletons get a travelling highlight |
+| §4 IBM Plex | Geist and Geist Mono; Newsreader unchanged |
+
+**Stays:** the 216 / fluid / 340 frame, 56px top bar, mobile 44px instrument bar and tabs; WCAG AA
+(test-enforced, both themes); reduced-motion handling; team identity as label + icon + hue; tabular
+numerics; Approve arms for 400ms and Enter does not submit; the 2px focus ring; no ALL-CAPS tracked
+eyebrows, no middle-dot meta strings, no `→` on buttons, no numbered non-sequences, no cream or
+terracotta, no weight above 600; no raw colour and no literal shadow outside `tokens.css`; Radix
+dialogs, fully restyled; `--text-display` stays reserved for the red-team category and the report's
+final metric, so new hero numerals use `--text-2xl`.
+
+### 12.2 New tokens
+
+All live in `tokens.css`, the only file allowed a raw colour, and are defined in both themes.
+
+- **Brand and gradients:** `--brand-1/2/3`, `--accent-to`, `--gradient-brand`, `--gradient-brand-deep`,
+  `--gradient-border`, `--gradient-danger` (the red-team category word, §8),
+  `--gradient-meter-{safe,pressure,critical}` with `--meter-pressure-end` and `--meter-critical-end`.
+- **Ambient and washes:** `--aurora` (three radial layers), `--grain`, `--spotlight-color`,
+  `--bloom-brand`, `--bloom-danger`, `--sheen`, and `--wash-row`, the per-theme strength of a feed or
+  roster row's tint (8% dark, 5% light; the `wash` utility reads it). The spotlight's *gradient* is built in `base.css`, not
+  here: a custom property holding `var(--mx)` substitutes where it is declared, so it would freeze at
+  its fallback instead of following the pointer. There is no separate "alpha cap" token; the guard
+  composites each layer's own alpha (§11), which is stricter and cannot drift from the value it checks.
+- **Shadows:** `--shadow-panel`, `--shadow-glow-{brand,ok,warn,danger}`, `--shadow-vignette-danger`;
+  the existing four re-tinted.
+- **Shape and type:** `--radius-chip` plus the new radii (§3.3); `--font-sans` and `--font-mono` now
+  Geist; `--tracking-tight`.
+- **Motion:** `--ease-spring`, `--dur-ambient` (40s), `--dur-sheen` (2.4s).
+
+### 12.3 Ambient layer, washes, and the alpha rule
+
+`AmbientBackground` is a fixed, `aria-hidden`, `pointer-events: none` layer behind the frame: the
+aurora gradients plus a fine grain tile (which also breaks up gradient banding on dark). The root
+that hosts it is `isolate` so the layer paints above the root's own ground and below content. The
+live view's centre column is `--surface-deck` at 60% so the aurora glows through; the rail and dock
+sit directly on it. Washes never exceed the alphas verified in §11, and nothing in the aurora
+animates anything but `transform`.
+
+The three glows are placed so their *peaks are on screen*. The layer is inset -15% on every side (so
+the drift never exposes an edge), which makes it 130% of the viewport, so a layer position `p` lands at
+`(p x 1.3 - 15)%` of the screen. The first draft put the peaks at 10% / 6%, just off the top-left
+corner, and only the faint tail showed; measured pixels at the top-left read `#171534` against a
+`#0A0C1C` ground. They now land near 13% / 19% (violet), 89% / 92% (cyan) and 79% / 16% (magenta),
+and the same pixel reads `#211C46`, with the violet reaching down the whole left side.
+
+### 12.4 Iconography
+
+`lucide-react`, imported per icon. Teams: principal `Compass`, data `Database`, modeling
+`BrainCircuit`, runner `FlaskConical`, red team `ShieldAlert`, reporter `FileText`. State glyphs
+(`✓ ◐ · ● ⊘ ▼`) become icons with the same sr-only state word the glyph had, so no state is carried by
+an icon alone. The wordmark is a geometric "F" in a gradient squircle (`Logo`), also the favicon.
+
+### 12.5 Material guide
+
+- **Panel:** opaque `--surface-panel`, 14px, gradient hairline (mask-composite ring), `--shadow-panel`,
+  13px semibold secondary title with an optional icon, cursor spotlight on pointer-fine devices.
+- **Button:** primary is the deep gradient with a sheen sweep and glow on hover; default is a bordered
+  panel surface; quiet is text until hovered. Press is `scale(0.98)`; hover never moves.
+- **Chip:** tinted `bg-<token>/15` with a token-coloured icon or dot and a text label.
+- **Float layer:** 20px glass with a gradient hairline and a bloom behind it.
+- **Controls:** styled select with a chevron, glow focus on inputs beside the unchanged 2px ring,
+  custom range slider and thin scrollbars, all from tokens.
+- **Gradient text:** hero numerals (budget and gate now; the report metric arrives in h2) in the brand
+  gradient, the red-team category word in the danger gradient (`danger-text`), and the wordmark, which
+  is a logotype and so exempt from the contrast minimum (WCAG 1.4.3). Otherwise always large text.

@@ -44,6 +44,22 @@ describe("TEAM_META", () => {
     }
   });
 
+  it("gives every team an icon, a 15% chip and a row wash — identity is label + icon + hue (§3.1)", () => {
+    const icons = new Set<unknown>();
+    for (const team of TEAM_ORDER) {
+      const meta = TEAM_META[team];
+      expect(meta.Icon).toBeTruthy();
+      icons.add(meta.Icon);
+      // Each class is spelled out in full (Tailwind's scanner cannot see a template string) and must
+      // name THIS team's own token — a copy-paste of another team's hue would pass every other check.
+      const hue = meta.text.replace("text-", "");
+      expect(meta.chip).toBe(`bg-${hue}/15 ${meta.text}`);
+      expect(meta.wash).toBe(`wash [--wash-hue:var(--${hue})]`);
+    }
+    // Six teams, six DIFFERENT icons: two teams sharing one would leave them apart by hue alone.
+    expect(icons.size).toBe(TEAM_ORDER.length);
+  });
+
   it("gives only red_team the heavier rail (design-plan §5's ▐ vs ▌)", () => {
     for (const team of TEAM_ORDER) {
       expect(TEAM_META[team].railWidth).toBe(team === "red_team" ? "thick" : "thin");

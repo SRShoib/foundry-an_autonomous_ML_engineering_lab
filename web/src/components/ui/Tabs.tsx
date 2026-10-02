@@ -75,10 +75,12 @@ export function Tabs<T extends string>({ tabs, active, onChange, label, classNam
           >
             {tab.label}
             {indicator && selected && (
+              /* M9h: the indicator is the brand gradient with a soft glow (a token colour reference,
+                 not a literal) rather than a flat accent line. */
               <motion.span
                 aria-hidden="true"
                 layoutId={indicatorId}
-                className="absolute inset-x-0 bottom-0 h-0.5 bg-accent"
+                className="brand-fill absolute inset-x-2 bottom-0 h-0.5 rounded-pill drop-shadow-[0_0_6px_var(--brand-2)]"
                 transition={{ duration: 0.24, ease: [0.65, 0, 0.35, 1] }}
               />
             )}
